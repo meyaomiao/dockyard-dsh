@@ -1196,6 +1196,27 @@ test("Grok catalog loader caches a local provider response", async () => {
   assert.equal(reads, 1);
 });
 
+test("Grok catalog loader returns persisted models before a slow CLI refresh", async () => {
+  let refreshStarted = false;
+  let releaseRefresh;
+  const refresh = new Promise((resolve) => { releaseRefresh = resolve; });
+  const loader = createGrokCatalogLoader({
+    grokHome: "/provider/grok",
+    readJson: async () => ({ models: { "grok-live": { info: { model: "grok-live" } } } }),
+    commandRunner: async () => {
+      refreshStarted = true;
+      await refresh;
+      return { output: "" };
+    },
+  });
+  const result = await loader();
+  assert.deepEqual(result.models, [{ id: "grok-live", name: "grok-live" }]);
+  assert.equal(result.source, "official_grok_local_cache");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(refreshStarted, true);
+  releaseRefresh();
+});
+
 test("Claude subscription status rejects API keys and maps live registry metadata", async () => {
   const apiKey = parseClaudeAuthStatus(JSON.stringify({
     loggedIn: true,

@@ -175,7 +175,7 @@ export async function fetchNativeResponse(url, init = {}, {
     clearTimeout(timer);
     upstreamSignal?.removeEventListener?.("abort", abort);
   };
-  const control = { cleanup, get timedOut() { return timedOut; }, timeoutError };
+  const control = { cleanup, get timedOut() { return timedOut; }, timeoutError, providerId };
   let handedOff = false;
   if (upstreamSignal) {
     if (upstreamSignal.aborted) abort();
@@ -204,6 +204,16 @@ export async function fetchNativeResponse(url, init = {}, {
   } catch (error) {
     if (error?.name === "AbortError" && timedOut && !error.providerId) {
       throw timeoutError;
+    }
+    if (!error?.providerId && error?.name !== "AbortError") {
+      // Raw transport errors (undici's "TypeError: fetch failed", DNS/TLS/
+      // socket failures) must not escape unclassified — they would surface
+      // as an immediate, unretried turn failure downstream. Re-raise them as
+      // provider-native transient faults while preserving the cause chain.
+      const wrapped = nativeProviderError(providerId, error?.message || "network request failed");
+      if (error !== undefined && error !== null) wrapped.cause = error;
+      wrapped.networkError = true;
+      throw wrapped;
     }
     throw error;
   } finally {
@@ -281,6 +291,15 @@ export async function* readSseEvents(response) {
     if (parsed) yield parsed;
   } catch (error) {
     if (control?.timedOut && !error?.providerId) throw control.timeoutError;
+    if (!error?.providerId && error?.name !== "AbortError") {
+      // A connection dying mid-SSE (reset, premature close, truncation) is a
+      // transient transport fault, not a provider verdict — wrap it the same
+      // way as pre-response failures so it classifies and retries upstream.
+      const wrapped = nativeProviderError(control?.providerId ?? "provider", error?.message || "stream was interrupted before completion");
+      if (error !== undefined && error !== null) wrapped.cause = error;
+      wrapped.networkError = true;
+      throw wrapped;
+    }
     throw error;
   } finally {
     control?.cleanup();

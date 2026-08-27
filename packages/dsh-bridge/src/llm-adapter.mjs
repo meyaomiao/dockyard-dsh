@@ -1,4 +1,33 @@
 import { ValidationError } from "../../core/src/errors.mjs";
+import { attachHarnessFailure } from "../../providers/src/failure-classification.mjs";
+
+/**
+ * Retry policy exposed to the harness (`dsh-llm` / `dsh-llm-retry`) for every
+ * route this adapter serves. Without it the harness installs its silent
+ * default, whose retryable codes never match the raw transport faults native
+ * transports can throw — so one flaky request killed the whole turn. Codes:
+ * - TRANSPORT/TIMEOUT: transient network faults (fetch failed, mid-SSE reset,
+ *   connect/headers timeouts) — worth backing off and retrying.
+ * - RATE_LIMIT/SERVER/EMPTY_RESPONSE: classic provider-side retryables.
+ * Quota (QUOTA), credentials (INVALID_CREDENTIAL), malformed requests, and
+ * context overflow (CONTEXT_WINDOW_EXCEEDED) deliberately stay non-retried.
+ */
+const PROVIDER_RETRY_POLICY = Object.freeze({
+  mode: "normal",
+  maxRetries: 5,
+  retryableCodes: Object.freeze([
+    "EMPTY_RESPONSE",
+    "RATE_LIMIT",
+    "SERVER",
+    "TIMEOUT",
+    "TRANSPORT",
+  ]),
+  backoff: Object.freeze({
+    initialDelayMs: 1_000,
+    maxDelayMs: 30_000,
+    jitterRatio: 0.2,
+  }),
+});
 
 function effortName(id) {
   return String(id)
@@ -158,7 +187,7 @@ export function createDockyardLlmAdapter({ runtime, providerIds, attachmentsReso
     },
 
     providerRetryPolicy() {
-      return undefined;
+      return PROVIDER_RETRY_POLICY;
     },
 
     async listModels(provider) {
@@ -174,6 +203,13 @@ export function createDockyardLlmAdapter({ runtime, providerIds, attachmentsReso
       const catalog = await providerCatalog(provider);
       return providerCatalogModels(provider, catalog).find((entry) => entry.id === model)
         ?? { provider, id: model, name: model };
+    },
+
+    async prepareCall(provider, model, signal) {
+      return {
+        model: await this.resolveModel(provider, model, signal),
+        stream: (options) => this.stream(options),
+      };
     },
 
     async *stream(options) {
@@ -207,7 +243,15 @@ export function createDockyardLlmAdapter({ runtime, providerIds, attachmentsReso
         sessionId: options.sessionId,
         ...(attachments ? { attachments } : {}),
       });
-      for await (const chunk of stream) yield chunk;
+      try {
+        for await (const chunk of stream) yield chunk;
+      } catch (error) {
+        // Last boundary before the harness: stamp recognized transient
+        // transport faults (fetch failed / timed out / mid-stream reset /
+        // 429) with their `failure` snapshot so dsh-llm-retry can classify
+        // and retry them instead of failing the turn outright.
+        throw attachHarnessFailure(error);
+      }
     },
 
     providers() {

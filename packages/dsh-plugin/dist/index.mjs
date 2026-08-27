@@ -51,7 +51,8 @@ function markRemoteMethods() {
     "nativeKeyRefresh",
     "nativeKeyRegister",
     "nativeKeyUnregister",
-    "nativeKeySetPolicy"
+    "nativeKeySetPolicy",
+    "usageReset"
   ]) {
     let initializer;
     Remote(name2)(void 0, {
@@ -144,6 +145,10 @@ var init_dockyard_remote_host = __esm({
       async nativeKeySetPolicy(request = {}) {
         if (!this.nativeKeyPool) throw new Error("Dockyard Native Key Pool \u5C1A\u672A\u6302\u8F7D");
         return this.nativeKeyPool.setPolicy(request.providerId, request.policy);
+      }
+      async usageReset(request = {}) {
+        if (!this.nativeKeyPool) throw new Error("Dockyard Native Key Pool \u5C1A\u672A\u6302\u8F7D");
+        return this.nativeKeyPool.resetUsage(request.providerId, request.ref ?? null);
       }
     };
     markRemoteMethods();
@@ -558,7 +563,7 @@ function providerAccount(account, auth) {
     }
   };
 }
-function createProviderRoute({ providerModule, accountPool }) {
+function createProviderRoute({ providerModule, accountPool, usageSink = null }) {
   if (!providerModule?.manifest?.id) throw new ValidationError("Provider module is required");
   if (!accountPool?.select || !accountPool?.resolve) throw new ValidationError("Account pool is required");
   if (accountPool.providerId !== providerModule.manifest.id) {
@@ -567,6 +572,13 @@ function createProviderRoute({ providerModule, accountPool }) {
       poolProviderId: accountPool.providerId
     });
   }
+  const reportUsage = (accountId, info) => {
+    if (typeof usageSink !== "function") return;
+    try {
+      usageSink(providerModule.manifest.id, accountId, info);
+    } catch {
+    }
+  };
   return {
     providerId: providerModule.manifest.id,
     async invoke(request, context = {}) {
@@ -593,12 +605,22 @@ function createProviderRoute({ providerModule, accountPool }) {
             quota: response?.quota,
             refresh: response?.refresh
           });
+          reportUsage(account.accountId, {
+            status: "success",
+            usage: response?.usage ?? null,
+            model: request?.model ?? null
+          });
           return response;
         } catch (error) {
           accountPool.report(account.accountId, {
             status: failureStatus(error),
             cooldownUntil: failureCooldown(error, selectedAccount),
             message: error?.message
+          });
+          reportUsage(account.accountId, {
+            status: "failure",
+            usage: error?.usage ?? null,
+            model: request?.model ?? null
           });
           if (!shouldFailover(error, accountPool, context)) throw error;
           lastError = error;
@@ -621,9 +643,11 @@ function createProviderRoute({ providerModule, accountPool }) {
           const selectedAccount = providerAccount(account, auth);
           const pending = [];
           let hasOutput = false;
+          let lastUsage = null;
           try {
             const output = providerModule.stream(request, { account: selectedAccount, auth }, context);
             for await (const chunk of await output) {
+              if (chunk?.type === "usage" && chunk.usage) lastUsage = chunk.usage;
               if (!hasOutput && !hasSubstantiveStreamOutput(chunk)) {
                 pending.push(chunk);
                 continue;
@@ -641,12 +665,22 @@ function createProviderRoute({ providerModule, accountPool }) {
               throw error;
             }
             accountPool.report(account.accountId, { status: "success" });
+            reportUsage(account.accountId, {
+              status: "success",
+              usage: lastUsage,
+              model: request?.model ?? null
+            });
             return;
           } catch (error) {
             accountPool.report(account.accountId, {
               status: failureStatus(error),
               cooldownUntil: failureCooldown(error, selectedAccount),
               message: error?.message
+            });
+            reportUsage(account.accountId, {
+              status: "failure",
+              usage: lastUsage,
+              model: request?.model ?? null
             });
             if (!hasOutput && shouldFailover(error, accountPool, context)) {
               lastError = error;
@@ -887,7 +921,79 @@ var AccountPool = class {
   }
 };
 
+// packages/providers/src/failure-classification.mjs
+var CONTEXT_WINDOW_EXCEEDED_CODE = "CONTEXT_WINDOW_EXCEEDED";
+var QUOTA_EXCEEDED_CODE = "QUOTA";
+var INVALID_CREDENTIAL_CODE = "INVALID_CREDENTIAL";
+function errorText(error) {
+  const parts = [
+    error?.message,
+    error?.upstreamMessage,
+    typeof error?.body === "string" ? error.body : null
+  ].filter((value) => typeof value === "string" && value.length > 0);
+  return parts.join(" ");
+}
+function harnessFailureCode(error) {
+  if (!error || typeof error !== "object") return null;
+  if (error.rateLimited) return "RATE_LIMIT";
+  if (error.quotaExhausted || /\b(?:quota|credits?|额度)\b.{0,80}\b(?:exhaust|deplet|exceed)|resource.?exhausted\b/i.test(errorText(error))) {
+    return QUOTA_EXCEEDED_CODE;
+  }
+  if (error.authExpired || error.authForbidden) return INVALID_CREDENTIAL_CODE;
+  const text3 = errorText(error).toLowerCase();
+  const numericStatus2 = Number(error.upstreamStatus ?? error.status);
+  if (/\btime'?d?\s*-?\s*out\b|\betimedout\b|\betimeout\b/.test(text3)) return "TIMEOUT";
+  if (numericStatus2 === 429 || numericStatus2 === "429" || /\b429\b|rate.?limit/.test(text3)) return "RATE_LIMIT";
+  if (/maximum prompt length|prompt(?: is)? too long|context (?:window )?(?:length|size)(?:\s+\w+){0,6}?(?:exceed|over|max)|too many tokens?\b|reduce the (?:length|number of)/.test(text3)) {
+    return CONTEXT_WINDOW_EXCEEDED_CODE;
+  }
+  if (Number.isInteger(numericStatus2) && numericStatus2 >= 500 || /internal server error|bad gateway|service unavailable|upstream|cloudflare/.test(text3)) {
+    return "SERVER";
+  }
+  if (/stream ended (?:before|without)/.test(text3)) return "TRANSPORT";
+  if (/\bnetwork\b|\bconnection\b|\bsocket\b|\bfetch\b|\bdns\b|\btls\b|\bssl\b|certificate|\beconn[a-z]+\b|\bepipe\b|\behostunreach\b|\benetunreach\b|\benotfound\b|\beai_again\b|premature close|other side closed|http2 request did not get a response|websock|terminated|connection closed before/i.test(text3)) {
+    return "TRANSPORT";
+  }
+  return null;
+}
+function attachHarnessFailure(error) {
+  if (!error || typeof error !== "object" || error.failure !== void 0) return error;
+  const code = harnessFailureCode(error);
+  if (!code) return error;
+  let message = typeof error.message === "string" && error.message.length > 0 ? error.message : "provider request failed";
+  message = message.replace(/\s+/g, " ").trim().slice(0, 500);
+  const numericStatus2 = Number(error.upstreamStatus ?? error.status);
+  const snapshot = {
+    message,
+    code,
+    ...Number.isInteger(numericStatus2) && numericStatus2 >= 100 && numericStatus2 <= 599 ? { status: numericStatus2 } : {}
+  };
+  Object.defineProperty(error, "failure", {
+    value: Object.freeze(snapshot),
+    enumerable: false,
+    configurable: false,
+    writable: false
+  });
+  return error;
+}
+
 // packages/dsh-bridge/src/llm-adapter.mjs
+var PROVIDER_RETRY_POLICY = Object.freeze({
+  mode: "normal",
+  maxRetries: 5,
+  retryableCodes: Object.freeze([
+    "EMPTY_RESPONSE",
+    "RATE_LIMIT",
+    "SERVER",
+    "TIMEOUT",
+    "TRANSPORT"
+  ]),
+  backoff: Object.freeze({
+    initialDelayMs: 1e3,
+    maxDelayMs: 3e4,
+    jitterRatio: 0.2
+  })
+});
 function effortName(id) {
   return String(id).replace(/[-_]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
@@ -1001,7 +1107,7 @@ function createDockyardLlmAdapter({ runtime, providerIds, attachmentsResolver = 
       return { id: provider, name: manifest?.displayName ?? provider };
     },
     providerRetryPolicy() {
-      return void 0;
+      return PROVIDER_RETRY_POLICY;
     },
     async listModels(provider) {
       await ensureRuntimeReady();
@@ -1014,6 +1120,12 @@ function createDockyardLlmAdapter({ runtime, providerIds, attachmentsResolver = 
       if (!providerHasConnectedAccount(runtime, provider)) return { provider, id: model, name: model };
       const catalog = await providerCatalog(provider);
       return providerCatalogModels(provider, catalog).find((entry) => entry.id === model) ?? { provider, id: model, name: model };
+    },
+    async prepareCall(provider, model, signal) {
+      return {
+        model: await this.resolveModel(provider, model, signal),
+        stream: (options) => this.stream(options)
+      };
     },
     async *stream(options) {
       await ensureRuntimeReady();
@@ -1039,7 +1151,11 @@ function createDockyardLlmAdapter({ runtime, providerIds, attachmentsResolver = 
         sessionId: options.sessionId,
         ...attachments ? { attachments } : {}
       });
-      for await (const chunk of stream) yield chunk;
+      try {
+        for await (const chunk of stream) yield chunk;
+      } catch (error) {
+        throw attachHarnessFailure(error);
+      }
     },
     providers() {
       return [...owned];
@@ -1055,11 +1171,11 @@ var DshInjectionBridge = class {
     this.runtime = runtime;
     this.adapter = adapter;
   }
-  async mountProvider(providerModule, accountPool) {
+  async mountProvider(providerModule, accountPool, { usageSink = null } = {}) {
     const providerId = providerModule?.manifest?.id;
     if (!providerId) throw new ValidationError("Provider module is required");
     if (!this.runtime.has(providerId)) await this.runtime.register(providerModule);
-    const route = createProviderRoute({ providerModule, accountPool });
+    const route = createProviderRoute({ providerModule, accountPool, usageSink });
     this.#routes.set(providerId, route);
     if (this.adapter?.registerProviderRoute) {
       await this.adapter.registerProviderRoute(route, providerModule.manifest);
@@ -1385,10 +1501,10 @@ async function fetchJson(url, init = {}, { timeoutMs = 2e4, fetchImpl = fetch } 
   else externalSignal?.addEventListener?.("abort", abortFromCaller, { once: true });
   try {
     const response = await fetchImpl(url, { ...init, signal: controller.signal });
-    const text2 = await response.text();
+    const text3 = await response.text();
     let body = null;
     try {
-      body = text2 ? JSON.parse(text2) : null;
+      body = text3 ? JSON.parse(text3) : null;
     } catch {
       body = null;
     }
@@ -1498,17 +1614,17 @@ function missingSession(sessionId, providerId, instructions) {
   };
 }
 function extractCodeInput(input) {
-  const text2 = String(input ?? "").trim();
-  if (!text2) return { code: "", state: "" };
+  const text3 = String(input ?? "").trim();
+  if (!text3) return { code: "", state: "" };
   try {
-    const url = new URL(text2);
+    const url = new URL(text3);
     return {
       code: url.searchParams.get("code") ?? "",
       state: url.searchParams.get("state") ?? "",
       error: url.searchParams.get("error") ?? ""
     };
   } catch {
-    const [code, state] = text2.split("#", 2);
+    const [code, state] = text3.split("#", 2);
     return { code: code.trim(), state: state?.trim() ?? "" };
   }
 }
@@ -1842,8 +1958,8 @@ function createCliOAuthAuthorizer({
     }
   }
   function captureOutput(session, chunk) {
-    const text2 = String(chunk ?? "");
-    session.output = `${session.output}${text2}`.slice(-32e3);
+    const text3 = String(chunk ?? "");
+    session.output = `${session.output}${text3}`.slice(-32e3);
     if (!session.authorizationUrl) {
       const match = session.output.match(URL_PATTERN);
       if (match?.[0]) session.authorizationUrl = cleanUrl(match[0]);
@@ -2746,12 +2862,12 @@ function diagnosticText(value) {
 function errorDetails(value) {
   if (value === void 0 || value === null) return {};
   if (typeof value === "string") {
-    const text2 = value.replace(/\s+/g, " ").trim();
-    if (!text2) return {};
+    const text3 = value.replace(/\s+/g, " ").trim();
+    if (!text3) return {};
     try {
       return errorDetails(JSON.parse(value));
     } catch {
-      return { message: text2 };
+      return { message: text3 };
     }
   }
   if (typeof value !== "object") return { message: String(value) };
@@ -2778,13 +2894,13 @@ function errorDetails(value) {
   };
 }
 function isAuthenticationFailure(message, body) {
-  const text2 = `${diagnosticText(message)} ${diagnosticText(body)}`.toLowerCase().replace(/[_-]+/g, " ");
+  const text3 = `${diagnosticText(message)} ${diagnosticText(body)}`.toLowerCase().replace(/[_-]+/g, " ");
   return [
     /access token.{0,80}(?:could not be validated|invalid|expired|revok|not valid|unauthor)/,
     /(?:invalid|expired|revok|unauthor|not valid).{0,80}(?:access token|token|credential)/,
     /\b(?:unauthorized|authentication failed|login required)\b/,
     /\bcredentials?\b.{0,50}\b(?:invalid|expired|missing|unavailable)\b/
-  ].some((pattern) => pattern.test(text2));
+  ].some((pattern) => pattern.test(text3));
 }
 function nativeProviderError(providerId, message, { status, body, code } = {}) {
   const bodyDetails = errorDetails(body);
@@ -2839,7 +2955,7 @@ async function fetchNativeResponse(url, init = {}, {
   };
   const control = { cleanup, get timedOut() {
     return timedOut;
-  }, timeoutError };
+  }, timeoutError, providerId };
   let handedOff = false;
   if (upstreamSignal) {
     if (upstreamSignal.aborted) abort();
@@ -2866,6 +2982,12 @@ async function fetchNativeResponse(url, init = {}, {
   } catch (error) {
     if (error?.name === "AbortError" && timedOut && !error.providerId) {
       throw timeoutError;
+    }
+    if (!error?.providerId && error?.name !== "AbortError") {
+      const wrapped = nativeProviderError(providerId, error?.message || "network request failed");
+      if (error !== void 0 && error !== null) wrapped.cause = error;
+      wrapped.networkError = true;
+      throw wrapped;
     }
     throw error;
   } finally {
@@ -2939,6 +3061,12 @@ async function* readSseEvents(response) {
     if (parsed) yield parsed;
   } catch (error) {
     if (control?.timedOut && !error?.providerId) throw control.timeoutError;
+    if (!error?.providerId && error?.name !== "AbortError") {
+      const wrapped = nativeProviderError(control?.providerId ?? "provider", error?.message || "stream was interrupted before completion");
+      if (error !== void 0 && error !== null) wrapped.cause = error;
+      wrapped.networkError = true;
+      throw wrapped;
+    }
     throw error;
   } finally {
     control?.cleanup();
@@ -3138,8 +3266,8 @@ ${textFromContent(part.content ?? part.output ?? part.result ?? part.text)}` });
       parts.push({ functionCall: { name: part.name ?? part.function?.name ?? "tool", args: parseToolArguments(part.arguments ?? part.input ?? part.function?.arguments) } });
       continue;
     }
-    const text2 = textFromContent(part);
-    if (text2) parts.push({ text: text2 });
+    const text3 = textFromContent(part);
+    if (text3) parts.push({ text: text3 });
   }
   return parts;
 }
@@ -3195,7 +3323,7 @@ function responsePayload(value) {
   return value.response && typeof value.response === "object" ? value.response : value;
 }
 async function* streamAntigravityResponse(response) {
-  let text2 = "";
+  let text3 = "";
   let textIndex = 0;
   let textOpen = true;
   let nextIndex = 1;
@@ -3219,7 +3347,7 @@ async function* streamAntigravityResponse(response) {
       if (part?.text) {
         if (part.thought === true || part.thoughtSignature) {
           if (textOpen) {
-            yield { type: "block-end", index: textIndex, block: { type: "text", text: text2 } };
+            yield { type: "block-end", index: textIndex, block: { type: "text", text: text3 } };
             textOpen = false;
           }
           if (!reasoning) {
@@ -3236,11 +3364,11 @@ async function* streamAntigravityResponse(response) {
         }
         if (!textOpen) {
           textIndex = nextIndex++;
-          text2 = "";
+          text3 = "";
           textOpen = true;
           yield { type: "block-start", index: textIndex, blockType: "text" };
         }
-        text2 += part.text;
+        text3 += part.text;
         yield { type: "text-delta", index: textIndex, text: part.text };
         continue;
       }
@@ -3251,7 +3379,7 @@ async function* streamAntigravityResponse(response) {
         reasoning = null;
       }
       if (textOpen) {
-        yield { type: "block-end", index: textIndex, block: { type: "text", text: text2 } };
+        yield { type: "block-end", index: textIndex, block: { type: "text", text: text3 } };
         textOpen = false;
       }
       const index = nextIndex++;
@@ -3265,7 +3393,7 @@ async function* streamAntigravityResponse(response) {
     }
   }
   if (reasoning) yield { type: "block-end", index: reasoning.index, block: { type: "reasoning", text: reasoning.text } };
-  if (textOpen) yield { type: "block-end", index: textIndex, block: { type: "text", text: text2 } };
+  if (textOpen) yield { type: "block-end", index: textIndex, block: { type: "text", text: text3 } };
   if (usage) yield { type: "usage", usage };
   yield { type: "finish", reason: finishReason(stop) };
 }
@@ -3483,8 +3611,8 @@ function extractAntigravityAccountEmail(...values) {
     if (direct) return direct;
     const nested = findEmailField(value);
     if (nested) return nested;
-    const text2 = typeof value === "string" ? value : "";
-    const explicit = text2.match(
+    const text3 = typeof value === "string" ? value : "";
+    const explicit = text3.match(
       /(?:applyAuthResult:\s*)?email\s*=\s*([^\s,;]+)|authenticated\s+successfully\s+as\s+([^\s,;]+)/i
     );
     const matched = normalizeEmail(explicit?.[1] ?? explicit?.[2]);
@@ -3871,9 +3999,9 @@ function parseQuotaData(data, now = /* @__PURE__ */ new Date(), source = "antigr
   }
   return windows;
 }
-function parseQuotaText(text2, now = /* @__PURE__ */ new Date(), source = "antigravity_cli") {
+function parseQuotaText(text3, now = /* @__PURE__ */ new Date(), source = "antigravity_cli") {
   const windows = [];
-  for (const line of text2.split(/\r?\n/)) {
+  for (const line of text3.split(/\r?\n/)) {
     const parts = line.split("	");
     if (parts.length < 3 || !/%$/.test(parts[2])) continue;
     const remaining = finiteNumber(parts[2].replace(/%$/, ""));
@@ -5003,12 +5131,46 @@ function createGrokCatalogLoader({
   let cached = null;
   let cachedAt = 0;
   let pending = null;
+  let pendingRefresh = null;
+  async function refreshLive(cache) {
+    if (pendingRefresh) return pendingRefresh;
+    pendingRefresh = (async () => {
+      try {
+        if (typeof commandRunner !== "function") return cached;
+        const result = await commandRunner(cliPath, ["models"], {
+          env,
+          timeoutMs,
+          providerId: PROVIDER_ID4
+        });
+        const models = parseGrokModelCatalog(result.output, cache);
+        if (models.length > 0) {
+          cached = { models, source: "official_grok_cli" };
+          cachedAt = Date.now();
+        }
+      } catch {
+      }
+      return cached;
+    })().finally(() => {
+      pendingRefresh = null;
+    });
+    return pendingRefresh;
+  }
   return async function loadCatalog({ force = false } = {}) {
     const now = Date.now();
     if (!force && cached && now - cachedAt < cacheTtlMs) return cached;
     if (pending) return pending;
     pending = (async () => {
       const cache = await readJson3(join7(resolvedHome, "models_cache.json"));
+      const localModels = parseGrokModelCatalog("", cache);
+      if (!force && localModels.length > 0) {
+        cached = {
+          models: localModels,
+          source: "official_grok_local_cache"
+        };
+        cachedAt = Date.now();
+        void refreshLive(cache);
+        return cached;
+      }
       let value;
       if (typeof commandRunner === "function") {
         try {
@@ -5463,11 +5625,10 @@ ${textFromContent(part.content ?? part.output ?? part.result ?? part.text)}` });
     }
     const call = toolCallPart(part);
     if (call) {
-      blocks.push({ type: "text", text: `[Tool Call ${call.name ?? call.function?.name ?? "tool"}] ${JSON.stringify(parseToolArguments(call.arguments ?? call.input ?? call.function?.arguments))}` });
       continue;
     }
-    const text2 = textFromContent(part);
-    if (text2) blocks.push({ type: "text", text: text2 });
+    const text3 = textFromContent(part);
+    if (text3) blocks.push({ type: "text", text: text3 });
   }
   return blocks;
 }
@@ -5533,7 +5694,7 @@ async function buildGrokRequest(request = {}, context = {}) {
   return body;
 }
 async function* streamGrokResponse(response) {
-  let text2 = "";
+  let text3 = "";
   let textIndex = 0;
   let textOpen = true;
   let nextIndex = 1;
@@ -5564,17 +5725,17 @@ async function* streamGrokResponse(response) {
       }
       if (!textOpen) {
         textIndex = nextIndex++;
-        text2 = "";
+        text3 = "";
         textOpen = true;
         yield { type: "block-start", index: textIndex, blockType: "text" };
       }
-      text2 += content;
+      text3 += content;
       yield { type: "text-delta", index: textIndex, text: content };
     }
     const reasoningDelta = delta.reasoning_content ?? delta.reasoningContent;
     if (reasoningDelta) {
       if (textOpen) {
-        yield { type: "block-end", index: textIndex, block: { type: "text", text: text2 } };
+        yield { type: "block-end", index: textIndex, block: { type: "text", text: text3 } };
         textOpen = false;
       }
       if (!reasoning) {
@@ -5593,7 +5754,7 @@ async function* streamGrokResponse(response) {
           reasoning = null;
         }
         if (textOpen) {
-          yield { type: "block-end", index: textIndex, block: { type: "text", text: text2 } };
+          yield { type: "block-end", index: textIndex, block: { type: "text", text: text3 } };
           textOpen = false;
         }
         const state2 = {
@@ -5616,7 +5777,7 @@ async function* streamGrokResponse(response) {
     }
   }
   if (reasoning) yield { type: "block-end", index: reasoning.index, block: { type: "reasoning", text: reasoning.text } };
-  if (textOpen) yield { type: "block-end", index: textIndex, block: { type: "text", text: text2 } };
+  if (textOpen) yield { type: "block-end", index: textIndex, block: { type: "text", text: text3 } };
   for (const state of tools.values()) {
     yield { type: "block-end", index: state.index, block: { type: "tool-call", id: state.id, name: state.name, arguments: state.arguments || "{}" } };
   }
@@ -6646,8 +6807,8 @@ async function anthropicContent(content, attachments) {
       });
       continue;
     }
-    const text2 = textFromContent(part);
-    if (text2) blocks.push({ type: "text", text: text2 });
+    const text3 = textFromContent(part);
+    if (text3) blocks.push({ type: "text", text: text3 });
   }
   return blocks;
 }
@@ -6715,7 +6876,7 @@ function mergeUsage(previous, next) {
   return next ? { ...previous ?? {}, ...next } : previous;
 }
 async function* streamClaudeResponse(response) {
-  let text2 = "";
+  let text3 = "";
   let textIndex = 0;
   let textOpen = true;
   let nextIndex = 1;
@@ -6735,7 +6896,7 @@ async function* streamClaudeResponse(response) {
       const block = payload.content_block ?? {};
       if (block.type === "tool_use" || block.type === "thinking" || block.type === "redacted_thinking") {
         if (textOpen) {
-          yield { type: "block-end", index: textIndex, block: { type: "text", text: text2 } };
+          yield { type: "block-end", index: textIndex, block: { type: "text", text: text3 } };
           textOpen = false;
         }
         const index = nextIndex++;
@@ -6755,7 +6916,7 @@ async function* streamClaudeResponse(response) {
       }
       if (block.type === "text" && !textOpen) {
         textIndex = nextIndex++;
-        text2 = "";
+        text3 = "";
         textOpen = true;
         yield { type: "block-start", index: textIndex, blockType: "text" };
       }
@@ -6766,17 +6927,17 @@ async function* streamClaudeResponse(response) {
       if (delta.type === "text_delta" && delta.text) {
         if (!textOpen) {
           textIndex = nextIndex++;
-          text2 = "";
+          text3 = "";
           textOpen = true;
           yield { type: "block-start", index: textIndex, blockType: "text" };
         }
-        text2 += delta.text;
+        text3 += delta.text;
         yield { type: "text-delta", index: textIndex, text: delta.text };
       } else if (delta.type === "thinking_delta" && delta.thinking) {
         let state = reasoning.get(payload.index);
         if (!state) {
           if (textOpen) {
-            yield { type: "block-end", index: textIndex, block: { type: "text", text: text2 } };
+            yield { type: "block-end", index: textIndex, block: { type: "text", text: text3 } };
             textOpen = false;
           }
           state = { index: nextIndex++, text: "" };
@@ -6824,7 +6985,7 @@ async function* streamClaudeResponse(response) {
   for (const thought of reasoning.values()) {
     yield { type: "block-end", index: thought.index, block: { type: "reasoning", text: thought.text } };
   }
-  if (textOpen) yield { type: "block-end", index: textIndex, block: { type: "text", text: text2 } };
+  if (textOpen) yield { type: "block-end", index: textIndex, block: { type: "text", text: text3 } };
   for (const tool of tools.values()) {
     yield {
       type: "block-end",
@@ -6893,15 +7054,16 @@ function createClaudeModule({ driver = {} } = {}) {
 }
 
 // modules/provider-cursor/src/driver.mjs
-import { createHash as createHash8, randomBytes as randomBytes3, randomUUID as randomUUID9 } from "node:crypto";
+import { createHash as createHash9, randomBytes as randomBytes3, randomUUID as randomUUID9 } from "node:crypto";
 import { homedir as homedir8 } from "node:os";
 
 // modules/provider-cursor/src/native-transport.mjs
 import { execFileSync as execFileSync2 } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import * as http2 from "node:http2";
 import { homedir as homedir7 } from "node:os";
 import { join as join9 } from "node:path";
-import { randomBytes as randomBytes2, randomUUID as randomUUID8 } from "node:crypto";
+import { createHash as createHash8, randomBytes as randomBytes2, randomUUID as randomUUID8 } from "node:crypto";
 
 // modules/provider-cursor/src/native-protocol.mjs
 import { createHash as createHash7, randomUUID as randomUUID7 } from "node:crypto";
@@ -7041,11 +7203,11 @@ function normalizedMessages(messages) {
     content: normalizeText(message?.content ?? message?.text).trim()
   })).filter((message) => message.content.length > 0);
 }
-function encodeUserMessage(text2, messageId, mode = 1) {
-  return concatBytes([stringField(1, text2), stringField(2, messageId), varintField(4, mode)]);
+function encodeUserMessage(text3, messageId, mode = 1) {
+  return concatBytes([stringField(1, text3), stringField(2, messageId), varintField(4, mode)]);
 }
-function encodeAssistantStep(text2) {
-  const assistantMessage = stringField(1, text2);
+function encodeAssistantStep(text3) {
+  const assistantMessage = stringField(1, text3);
   const conversationStep = bytesField(1, assistantMessage);
   return conversationStep;
 }
@@ -7081,14 +7243,13 @@ ${message.content}`;
     roots.push(jsonBlob(blobStore, { role: "user", content: [{ type: "text", text: resultText }] }));
     turnRecords.at(-1)?.steps.push(putBlob(blobStore, encodeAssistantStep(resultText)));
   }
-  for (const record of turnRecords.slice(0, -1)) {
-    const userMessageId = putBlob(blobStore, encodeUserMessage(record.text, randomUUID7()));
-    const turn = encodeConversationTurn(userMessageId, record.steps, requestId);
-    turns.push(putBlob(blobStore, turn));
-  }
+  // turns omitted (fix 2026-08-28): the server depth-decodes turn blobs with its own
+  // schema; our guessed field layout derails its decoder => "illegal tag: field no N
+  // wire type 6/7", "cant skip wire type 4", "premature EOF". Full history is already
+  // inlined into the current user message, so turns are not required. Verified live:
+  // roots-only completes where roots+turns fails (same payload, same token).
   return concatBytes([
-    ...roots.map((id) => bytesField(1, id)),
-    ...turns.map((id) => bytesField(8, id))
+    ...roots.map((id) => bytesField(1, id))
   ]);
 }
 function encodeRequestContext(timeZone = "UTC") {
@@ -7191,13 +7352,13 @@ function cursorFrameMetadata(message, flags = null) {
   };
 }
 function decodeCursorConnectTrailer(payload) {
-  const text2 = textDecoder.decode(payload instanceof Uint8Array ? payload : Uint8Array.from(payload ?? [])).trim();
-  if (!text2) return null;
+  const text3 = textDecoder.decode(payload instanceof Uint8Array ? payload : Uint8Array.from(payload ?? [])).trim();
+  if (!text3) return null;
   let parsed;
   try {
-    parsed = JSON.parse(text2);
+    parsed = JSON.parse(text3);
   } catch {
-    return { code: "CURSOR_CONNECT_ERROR", message: text2.slice(0, 500) };
+    return { code: "CURSOR_CONNECT_ERROR", message: text3.slice(0, 500) };
   }
   const error = parsed?.error && typeof parsed.error === "object" ? parsed.error : null;
   if (!error) return null;
@@ -7247,6 +7408,15 @@ function encodeKvResponse(request, blobs) {
 }
 function decodeCursorKvRequest(message) {
   return decodeKvRequest(message);
+}
+function decodeCursorTruncateFlag(payload) {
+  try {
+    if (!payload || payload.length < 4) return false;
+    const needle = Buffer.from("truncate");
+    return Buffer.from(payload).includes(needle);
+  } catch {
+    return false;
+  }
 }
 var cursorNativeProtocolConstants = Object.freeze({
   endpoint: "https://agent.api5.cursor.sh/agent.v1.AgentService/Run",
@@ -7364,6 +7534,15 @@ function cursorHeaders(endpoint2, token, requestId, env) {
     "x-cursor-streaming": "true"
   };
 }
+var CURSOR_DEBUG_FILE = "/tmp/dockyard-cursor-debug.log";
+var cursorDebugSeq = 0;
+function cursorDebug(line) {
+  try {
+    appendFileSync(CURSOR_DEBUG_FILE, `${(/* @__PURE__ */ new Date()).toISOString()} #${++cursorDebugSeq} ${line}
+`);
+  } catch {
+  }
+}
 function cursorStatusError(status) {
   return nativeProviderError(PROVIDER_ID8, `Cursor AgentService returned HTTP ${status}`, { status });
 }
@@ -7392,6 +7571,9 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
       timeZone
     });
     const url = new URL(endpoint2);
+    const sid = `S${Date.now().toString(36)}`;
+    const tokenFP = createHash8("sha256").update(String(token)).digest("hex").slice(0, 8);
+    cursorDebug(`${sid} BEGIN model=${model} endpoint=${url.host} token=${tokenFP}`);
     const session = http2Module.connect(url.origin);
     const queue = createAsyncQueue();
     let stream = null;
@@ -7404,6 +7586,7 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
       return error;
     };
     let completed = false;
+    let truncated = null;
     let cleaned = false;
     let heartbeat;
     const cleanup = () => {
@@ -7421,11 +7604,15 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
       stream?.close(http2Module.constants?.NGHTTP2_CANCEL);
       session.close();
     };
-    session.once("error", (error) => queue.fail(error));
+    session.once("error", (error) => {
+      cursorDebug(`${sid} SESSION-ERROR ${error.message} code=${error.code ?? ""}`);
+      queue.fail(error);
+    });
     try {
       stream = session.request(cursorHeaders(url, token, requestId, context.env ?? process.env));
       stream.once("response", (headers) => {
         responseStatus = Number(headers[":status"] ?? 0);
+        cursorDebug(`${sid} STATUS ${responseStatus} ct=${headers["content-type"] ?? "?"}`);
         if (responseStatus >= 400) queue.fail(cursorStatusError(responseStatus));
       });
       stream.on("data", (chunk) => {
@@ -7436,9 +7623,11 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
         const decoded = decodeConnectFrames(merged);
         responseBuffer = decoded.rest;
         for (const frame of decoded.frames) {
+          if (process.env.DOCKYARD_CURSOR_TRACE === "1") cursorDebug(`${sid} FRAME flags=${frame.flags} len=${frame.payload.length}`);
           if ((frame.flags & 2) !== 0) {
             const trailer = decodeCursorConnectTrailer(frame.payload);
             if (trailer) {
+              cursorDebug(`${sid} TRAILER-ERROR code=${trailer.code} msg=${trailer.message}`);
               queue.fail(nativeProviderError(PROVIDER_ID8, trailer.message, {
                 code: trailer.code,
                 body: { code: trailer.code, message: trailer.message }
@@ -7454,6 +7643,11 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
             queue.fail(protocolError("Cursor returned a compressed protobuf frame", "CURSOR_COMPRESSED_RESPONSE"));
             continue;
           }
+          if (truncated === null && frame.payload.length < 64 && decodeCursorTruncateFlag(frame.payload)) {
+            truncated = true;
+            cursorDebug(`${sid} TRUNCATE-FLAG received \u2014 server asks to shorten conversation`);
+            continue;
+          }
           const kv = decodeCursorKvRequest(frame.payload);
           if (kv) {
             try {
@@ -7463,10 +7657,10 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
             }
             continue;
           }
-          const text3 = decodeCursorText(frame.payload);
+          const text4 = decodeCursorText(frame.payload);
           const turnComplete = cursorTurnComplete(frame.payload);
-          if (text3) queue.push({ type: "text", text: text3 });
-          if (!text3) responseDiagnostics.push(cursorFrameMetadata(frame.payload, frame.flags));
+          if (text4) queue.push({ type: "text", text: text4 });
+          if (!text4) responseDiagnostics.push(cursorFrameMetadata(frame.payload, frame.flags));
           if (turnComplete) {
             completed = true;
             queue.push({ type: "complete" });
@@ -7474,6 +7668,10 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
         }
       });
       stream.once("end", () => {
+        if (truncated) {
+          queue.fail(nativeProviderError(PROVIDER_ID8, "Cursor requested conversation truncation", { code: "CURSOR_TRUNCATE_REQUESTED" }));
+        }
+        cursorDebug(`${sid} END completed=${completed} leftover=${responseBuffer.byteLength}B diag=${responseDiagnostics.length}${responseBuffer.byteLength > 0 ? ` leftoverHex=${Buffer.from(responseBuffer.slice(0, 64)).toString("hex")}` : ""}`);
         if (responseBuffer.byteLength > 0) {
           responseDiagnostics.push({
             payloadLength: responseBuffer.byteLength,
@@ -7484,7 +7682,10 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
           queue.close();
         }
       });
-      stream.once("error", (error) => queue.fail(error));
+      stream.once("error", (error) => {
+        cursorDebug(`${sid} STREAM-ERROR ${error.message} code=${error.code ?? ""}`);
+        queue.fail(error);
+      });
       stream.write(Buffer.from(encoded.frame));
       heartbeat = setInterval(() => {
         if (!stream || stream.destroyed || stream.closed) return;
@@ -7494,13 +7695,13 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
         }
       }, 5e3);
       context.signal?.addEventListener?.("abort", onAbort, { once: true });
-      let text2 = "";
+      let text3 = "";
       let failed = false;
       yield { type: "block-start", index: 0, blockType: "text" };
       try {
         for await (const item of queue) {
           if (item.type === "text") {
-            text2 += item.text;
+            text3 += item.text;
             yield { type: "text-delta", index: 0, text: item.text };
           } else if (item.type === "complete") {
             completed = true;
@@ -7518,10 +7719,10 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
         if (!completed) {
           throw protocolError("Cursor AgentService ended before completing the turn", "CURSOR_INCOMPLETE_RESPONSE");
         }
-        if (text2.trim().length === 0) {
+        if (text3.trim().length === 0) {
           throw protocolError("Cursor AgentService completed without assistant text", "CURSOR_EMPTY_RESPONSE");
         }
-        yield { type: "block-end", index: 0, block: { type: "text", text: text2 } };
+        yield { type: "block-end", index: 0, block: { type: "text", text: text3 } };
         yield { type: "finish", reason: { kind: "stop" } };
       }
     } catch (error) {
@@ -7560,7 +7761,32 @@ function createCursorNativeExecutor({
         throw error;
       }
     }
-    return streamCursor({ endpoint: safeEndpoint, token: auth.token, request, context, http2Module });
+    const RETRYABLE_CODES = /* @__PURE__ */ new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED"]);
+    let lastError = null;
+    let messages = request.messages;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      let emittedText = false;
+      try {
+        const stream = streamCursor({ endpoint: safeEndpoint, token: auth.token, request: { ...request, messages }, context, http2Module });
+        async function* guard() {
+          for await (const chunk of stream) {
+            if (chunk?.type === "text-delta") emittedText = true;
+            yield chunk;
+          }
+        }
+        return guard();
+      } catch (error) {
+        lastError = error;
+        const retriable = RETRYABLE_CODES.has(error?.code ?? "") && !(error?.status >= 400);
+        if (error?.code === "CURSOR_TRUNCATE_REQUESTED" && Array.isArray(messages) && messages.length > 1) {
+          messages = messages.slice(Math.ceil(messages.length / 2));
+          continue;
+        }
+        if (attempt === 0 && retriable && !emittedText) continue;
+        throw error;
+      }
+    }
+    throw lastError;
   };
   executor.nativeTransport = "cursor-connect-agent-service";
   return executor;
@@ -7574,7 +7800,7 @@ var cursorNativeTransportConstants = Object.freeze({
 var PROVIDER_ID9 = "cursor";
 var CREDENTIAL_SLOT5 = Symbol("dockyard-cursor-session");
 function hash5(value) {
-  return createHash8("sha256").update(String(value)).digest("hex");
+  return createHash9("sha256").update(String(value)).digest("hex");
 }
 function firstString8(...values) {
   return values.find((value) => typeof value === "string" && value.length > 0) ?? null;
@@ -7631,8 +7857,8 @@ function parseCursorAuthStatus(output) {
     parseTextEmail(output)
   );
   const explicitLoggedIn = statusValue(raw, "loggedIn", "authenticated", "isAuthenticated");
-  const text2 = String(output);
-  const loggedIn = typeof explicitLoggedIn === "boolean" ? explicitLoggedIn : !/not authenticated|not logged in|unauthenticated|please login/i.test(text2) && /authenticated|logged in|account|endpoint/i.test(text2);
+  const text3 = String(output);
+  const loggedIn = typeof explicitLoggedIn === "boolean" ? explicitLoggedIn : !/not authenticated|not logged in|unauthenticated|please login/i.test(text3) && /authenticated|logged in|account|endpoint/i.test(text3);
   const accountId = firstString8(
     statusValue(raw, "accountId", "account_id", "userId", "user_id", "user.id", "account.id"),
     email,
@@ -8047,7 +8273,7 @@ var CursorSubscriptionDriver = class {
       instructions: "\u8BF7\u5728\u5B98\u65B9 Cursor \u6388\u6743\u9875\u9762\u9009\u62E9\u8D26\u53F7\u5E76\u5B8C\u6210\u6388\u6743\uFF1B\u5B8C\u6210\u540E\u4F1A\u81EA\u52A8\u8FD4\u56DE Dockyard DSH\u3002",
       authorizationUrlBuilder: async () => {
         const verifier = randomBytes3(32).toString("base64url");
-        const challenge = createHash8("sha256").update(verifier).digest("base64url");
+        const challenge = createHash9("sha256").update(verifier).digest("base64url");
         const uuid = randomUUID9();
         return {
           url: `${this.websiteUrl}/loginDeepControl?${new URLSearchParams({
@@ -8523,11 +8749,15 @@ var DockyardRuntime = class {
     stateStore = new JsonStateStore(),
     secretStore = createDefaultSecretStore(),
     dshAdapter = null,
+    usageSink = null,
+    usageLedger = null,
     refreshTimeoutMs = numericOption(process.env.DOCKYARD_DSH_REFRESH_TIMEOUT_MS, DEFAULT_REFRESH_TIMEOUT_MS)
   } = {}) {
     this.runtime = runtime;
     this.stateStore = stateStore;
     this.secretStore = secretStore;
+    this.usageLedger = usageLedger ?? null;
+    this.usageSink = typeof usageSink === "function" ? usageSink : this.usageLedger ? (providerId, accountId, info) => this.usageLedger.record(providerId, accountId, info) : null;
     this.bridge = new DshInjectionBridge({ runtime, adapter: dshAdapter });
     this.providers = providers;
     this.refreshTimeoutMs = refreshTimeoutMs;
@@ -8561,7 +8791,7 @@ var DockyardRuntime = class {
         }
         this.#entries.set(providerId, { ...entry, pool });
         if (!this.runtime.has(providerId)) await this.runtime.register(entry.module);
-        await this.bridge.mountProvider(entry.module, pool);
+        await this.bridge.mountProvider(entry.module, pool, { usageSink: this.usageSink });
       }
       this.#initialized = true;
       return this;
@@ -8896,13 +9126,25 @@ var DockyardRuntime = class {
   snapshot() {
     return {
       generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      providers: [...this.#entries].map(([providerId, entry]) => ({
-        providerId,
-        manifest: { ...entry.module.manifest },
-        policy: entry.pool.policy,
-        defaultAccountId: entry.pool.getDefaultAccountId(),
-        accounts: entry.pool.list()
-      })),
+      providers: [...this.#entries].map(([providerId, entry]) => {
+        let usage = null;
+        try {
+          usage = this.usageLedger?.snapshot?.(providerId) ?? null;
+        } catch {
+          usage = null;
+        }
+        return {
+          providerId,
+          manifest: { ...entry.module.manifest },
+          policy: entry.pool.policy,
+          defaultAccountId: entry.pool.getDefaultAccountId(),
+          accounts: entry.pool.list().map((account) => ({
+            ...account,
+            tokenUsage: usage?.subjects?.[account.accountId] ?? null
+          })),
+          tokenTotals: usage?.totals ?? null
+        };
+      }),
       routes: this.bridge.listRoutes()
     };
   }
@@ -9204,11 +9446,11 @@ function providerIdFor(runtime, input) {
 function commandTokens(rawInput) {
   return String(rawInput ?? "").trim().split(/\s+/).filter(Boolean);
 }
-function commandSuccess(text2) {
-  return { kind: "success", text: text2 };
+function commandSuccess(text3) {
+  return { kind: "success", text: text3 };
 }
-function commandError(text2) {
-  return { kind: "error", text: text2 };
+function commandError(text3) {
+  return { kind: "error", text: text3 };
 }
 function openDefaultBrowser(url) {
   if (process.platform !== "darwin" || !url) return;
@@ -9639,9 +9881,9 @@ var dockyardDshConstants = Object.freeze({
 });
 
 // packages/dsh-plugin/src/dockyard-credential-store.mjs
-import { createHash as createHash9 } from "node:crypto";
+import { createHash as createHash10 } from "node:crypto";
 function dshCredentialRef(ref) {
-  const digest = createHash9("sha256").update(String(ref)).digest("hex");
+  const digest = createHash10("sha256").update(String(ref)).digest("hex");
   return `DOCKYARD_DSH_${digest}`;
 }
 function parseCredential(value) {
@@ -9679,7 +9921,8 @@ function createDockyardCredentialStore(credentials, fallback = null) {
 }
 
 // packages/dsh-plugin/src/native-key-pool-host.mjs
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 // packages/dsh-plugin/src/native-usage.mjs
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
@@ -9826,16 +10069,293 @@ function usageModuleFor(providerId) {
   return modulesByProvider.get(providerId) ?? genericUnsupported;
 }
 
+// packages/dsh-plugin/src/token-usage-ledger.mjs
+import { join as join11 } from "node:path";
+var RECENT_LIMIT = 50;
+var DAY_RETENTION_DAYS = 90;
+var DAY_RESET_HOUR = 8;
+var SAVE_DEBOUNCE_MS = 750;
+var TOKEN_FIELDS = Object.freeze([
+  "inputTokens",
+  "outputTokens",
+  "cacheReadTokens",
+  "cacheWriteTokens",
+  "reasoningTokens"
+]);
+function nonNegativeInteger(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+}
+function text(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+function isoNow(clock) {
+  try {
+    return (clock ?? /* @__PURE__ */ new Date())().toISOString();
+  } catch {
+    return (/* @__PURE__ */ new Date()).toISOString();
+  }
+}
+function dayKey(date) {
+  const value = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(value.getTime())) return null;
+  const shifted = new Date(value.getTime() - DAY_RESET_HOUR * 60 * 60 * 1e3);
+  const year = shifted.getFullYear();
+  const month = String(shifted.getMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function emptyUsageEntry() {
+  return {
+    requests: 0,
+    ok: 0,
+    errors: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0,
+    firstUsedAt: null,
+    lastUsedAt: null,
+    lastModel: null,
+    lastStatus: null,
+    days: {},
+    recent: []
+  };
+}
+function emptyDayBucket() {
+  return {
+    requests: 0,
+    ok: 0,
+    errors: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0
+  };
+}
+function pruneDays(days, nowMs = Date.now()) {
+  if (!days || typeof days !== "object") return {};
+  const cutoff = nowMs - DAY_RETENTION_DAYS * 24 * 60 * 60 * 1e3;
+  const kept = {};
+  for (const [key, bucket] of Object.entries(days)) {
+    const parsed = /* @__PURE__ */ new Date(`${key}T00:00:00`);
+    if (!Number.isNaN(parsed.getTime()) && parsed.getTime() < cutoff) continue;
+    kept[key] = bucket;
+  }
+  return kept;
+}
+function applyUsage(entry, info = {}, clock = null) {
+  const next = entry && typeof entry === "object" ? { ...emptyUsageEntry(), ...entry } : emptyUsageEntry();
+  const at = typeof info.at === "string" && info.at ? info.at : isoNow(clock);
+  const status = info.status === "success" || info.status === "failure" ? info.status : "success";
+  const usage = info.usage && typeof info.usage === "object" ? info.usage : null;
+  const tokens = {};
+  for (const field of TOKEN_FIELDS) tokens[field] = nonNegativeInteger(usage?.[field]) ?? 0;
+  const totalTokens = nonNegativeInteger(usage?.totalTokens) ?? tokens.inputTokens + tokens.outputTokens + tokens.cacheReadTokens + tokens.cacheWriteTokens;
+  next.requests += 1;
+  next[status === "success" ? "ok" : "errors"] += 1;
+  for (const field of TOKEN_FIELDS) next[field] += tokens[field];
+  next.totalTokens += totalTokens;
+  next.firstUsedAt ??= at;
+  next.lastUsedAt = at;
+  next.lastModel = text(info.model);
+  next.lastStatus = status;
+  const day = dayKey(at);
+  if (day) {
+    next.days = pruneDays(next.days, Date.parse(at));
+    const bucket = { ...emptyDayBucket(), ...next.days[day] ?? {} };
+    bucket.requests += 1;
+    bucket[status === "success" ? "ok" : "errors"] += 1;
+    for (const field of TOKEN_FIELDS) bucket[field] += tokens[field];
+    bucket.totalTokens += totalTokens;
+    next.days = { ...next.days, [day]: bucket };
+  }
+  const recent = Array.isArray(next.recent) ? next.recent.filter((row) => row && typeof row === "object") : [];
+  recent.push({
+    at,
+    model: text(info.model),
+    status,
+    ...tokens,
+    totalTokens
+  });
+  next.recent = recent.slice(-RECENT_LIMIT);
+  return next;
+}
+function reviveUsageEntry(raw) {
+  const base = emptyUsageEntry();
+  if (!raw || typeof raw !== "object") return base;
+  const revived = { ...base };
+  for (const field of ["requests", "ok", "errors", ...TOKEN_FIELDS, "totalTokens"]) {
+    revived[field] = nonNegativeInteger(raw[field]) ?? 0;
+  }
+  for (const field of ["firstUsedAt", "lastUsedAt", "lastModel", "lastStatus"]) {
+    revived[field] = raw[field] ?? null;
+  }
+  revived.days = pruneDays(raw.days);
+  revived.recent = Array.isArray(raw.recent) ? raw.recent.filter((row) => row && typeof row === "object").slice(-RECENT_LIMIT) : [];
+  return revived;
+}
+function sumUsageEntries(entries) {
+  const total = emptyUsageEntry();
+  for (const entry of entries) {
+    if (!entry) continue;
+    total.requests += entry.requests ?? 0;
+    total.ok += entry.ok ?? 0;
+    total.errors += entry.errors ?? 0;
+    for (const field of [...TOKEN_FIELDS, "totalTokens"]) total[field] += entry[field] ?? 0;
+    if (!total.firstUsedAt || entry.firstUsedAt && entry.firstUsedAt < total.firstUsedAt) {
+      total.firstUsedAt = entry.firstUsedAt;
+    }
+    if (!total.lastUsedAt || entry.lastUsedAt && entry.lastUsedAt > total.lastUsedAt) {
+      total.lastUsedAt = entry.lastUsedAt;
+      total.lastModel = entry.lastModel ?? total.lastModel;
+      total.lastStatus = entry.lastStatus ?? total.lastStatus;
+    }
+  }
+  return total;
+}
+var TokenUsageLedger = class _TokenUsageLedger {
+  #providers = /* @__PURE__ */ new Map();
+  #stateStore;
+  #clock;
+  #logger;
+  #saveTimer = null;
+  #savePromise = Promise.resolve();
+  #disposed = false;
+  constructor({ stateStore = null, filePath = null, logger = console, clock = null } = {}) {
+    this.#stateStore = stateStore ?? _TokenUsageLedger.defaultStateStore(filePath);
+    this.#clock = clock;
+    this.#logger = logger;
+  }
+  static defaultStateStore(filePath) {
+    return new JsonStateStore({
+      filePath: filePath ?? join11(defaultDockyardHome(), "token-usage.json")
+    });
+  }
+  async load() {
+    let state = null;
+    try {
+      state = await this.#stateStore.load();
+    } catch (error) {
+      this.#logger.warn?.(`token \u7528\u91CF\u8BB0\u5F55\u8BFB\u53D6\u5931\u8D25\uFF1A${error instanceof Error ? error.message : error}`);
+      return this;
+    }
+    const providers = state?.usage?.providers;
+    if (providers && typeof providers === "object") {
+      for (const [providerId, subjects] of Object.entries(providers)) {
+        if (!subjects || typeof subjects !== "object") continue;
+        const map = /* @__PURE__ */ new Map();
+        for (const [subjectId, entry] of Object.entries(subjects)) {
+          if (!text(subjectId)) continue;
+          map.set(subjectId, reviveUsageEntry(entry));
+        }
+        if (map.size > 0) this.#providers.set(providerId, map);
+      }
+    }
+    return this;
+  }
+  /** Record one finished request. Never throws; never blocks on disk. */
+  record(providerId, subjectId, info = {}) {
+    if (this.#disposed) return;
+    const provider = text(providerId);
+    const subject = text(subjectId);
+    if (!provider || !subject) return;
+    let subjects = this.#providers.get(provider);
+    if (!subjects) {
+      subjects = /* @__PURE__ */ new Map();
+      this.#providers.set(provider, subjects);
+    }
+    subjects.set(subject, applyUsage(subjects.get(subject), info, this.#clock));
+    this.#scheduleSave();
+  }
+  /** Public snapshot: `{ subjectId -> entry }` plus provider totals. */
+  snapshot(providerId) {
+    const subjects = this.#providers.get(text(providerId)) ?? /* @__PURE__ */ new Map();
+    const rows = Object.fromEntries([...subjects].map(([subjectId, entry]) => [subjectId, entry]));
+    return {
+      subjects: rows,
+      totals: sumUsageEntries([...subjects.values()]),
+      updatedAt: isoNow(this.#clock)
+    };
+  }
+  /** Merge helper for status payloads: `{ ref -> entry }` lookup. */
+  entryFor(providerId, subjectId) {
+    return this.#providers.get(text(providerId))?.get(text(subjectId)) ?? null;
+  }
+  /** Reset one credential or the whole provider. Returns what was cleared. */
+  reset(providerId, subjectId = null) {
+    const provider = text(providerId);
+    if (!provider) return { providers: 0, subjects: 0 };
+    if (subjectId === null || subjectId === void 0) {
+      const subjects2 = this.#providers.get(provider)?.size ?? 0;
+      this.#providers.delete(provider);
+      this.#scheduleSave();
+      return { providers: 1, subjects: subjects2 };
+    }
+    const subjects = this.#providers.get(provider);
+    if (!subjects?.has(text(subjectId))) return { providers: 0, subjects: 0 };
+    subjects.delete(text(subjectId));
+    if (subjects.size === 0) this.#providers.delete(provider);
+    this.#scheduleSave();
+    return { providers: 0, subjects: 1 };
+  }
+  #scheduleSave() {
+    if (this.#disposed || this.#saveTimer) return;
+    this.#saveTimer = setTimeout(() => {
+      this.#saveTimer = null;
+      this.#savePromise = this.#savePromise.then(() => this.flush(), () => this.flush());
+    }, SAVE_DEBOUNCE_MS);
+    this.#saveTimer.unref?.();
+  }
+  async flush() {
+    if (this.#saveTimer) {
+      clearTimeout(this.#saveTimer);
+      this.#saveTimer = null;
+    }
+    const payload = {
+      schema: 1,
+      usage: {
+        providers: Object.fromEntries([...this.#providers].map(([providerId, subjects]) => [
+          providerId,
+          Object.fromEntries(subjects)
+        ]))
+      }
+    };
+    try {
+      await this.#stateStore.save(payload);
+    } catch (error) {
+      this.#logger.warn?.(`token \u7528\u91CF\u8BB0\u5F55\u5199\u5165\u5931\u8D25\uFF1A${error instanceof Error ? error.message : error}`);
+    }
+    return payload;
+  }
+  async dispose() {
+    this.#disposed = true;
+    await this.flush();
+  }
+};
+
 // packages/dsh-plugin/src/native-key-pool-host.mjs
 var POLICIES = /* @__PURE__ */ new Set(["manual", "round_robin", "failover"]);
 var PATCH_MARK = Symbol("dockyard-native-key-pool");
 var VISIBLE_STREAM_CHUNKS = /* @__PURE__ */ new Set(["text-delta", "reasoning-delta", "tool-call-delta"]);
+function isSharedUpstreamRateLimit(error) {
+  const details = [
+    error?.message,
+    error?.metadata?.limit_source,
+    error?.metadata?.raw
+  ].filter((value) => typeof value === "string").join(" ");
+  return details.includes("upstream_provider_shared_pool") || details.includes("temporarily rate-limited upstream");
+}
 function retryableStreamError(error) {
+  if (isSharedUpstreamRateLimit(error)) return false;
   return Boolean(
     error?.rateLimited || error?.quotaExhausted || error?.authExpired || error?.authForbidden || [401, 403, 429].includes(Number(error?.status)) || [401, 403, 429].includes(Number(error?.upstreamStatus))
   );
 }
-function text(value) {
+function text2(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 function pathValue(source, path = []) {
@@ -9847,10 +10367,10 @@ function pathValue(source, path = []) {
   return current;
 }
 function cleanRecord(raw) {
-  const keys = Array.isArray(raw?.keys) ? raw.keys.filter((entry) => text(entry?.ref)).map((entry) => ({
-    ref: text(entry.ref),
-    label: text(entry.label) ?? text(entry.ref),
-    createdAt: text(entry.createdAt)
+  const keys = Array.isArray(raw?.keys) ? raw.keys.filter((entry) => text2(entry?.ref)).map((entry) => ({
+    ref: text2(entry.ref),
+    label: text2(entry.label) ?? text2(entry.ref),
+    createdAt: text2(entry.createdAt)
   })) : [];
   return {
     policy: POLICIES.has(raw?.policy) ? raw.policy : "manual",
@@ -9875,7 +10395,7 @@ function nativeProfile(ctx, providerId) {
   const entry = llm?.listConfigurableProviders?.().find((candidate2) => candidate2.provider === providerId) ?? null;
   const profile = entry && settings?.get ? pathValue(settings.get(entry.settingsNs), entry.settingsPath) : null;
   if (!entry || !profile || typeof profile !== "object") return { entry, profile: null };
-  const native = entry.settingsNs === "llm-pi-ai" || text(profile.apiKeyEnv) !== null;
+  const native = entry.settingsNs === "llm-pi-ai" || text2(profile.apiKeyEnv) !== null;
   return { entry, profile: native ? profile : null };
 }
 var NativeKeyPoolHost = class {
@@ -9889,19 +10409,28 @@ var NativeKeyPoolHost = class {
   cursors = /* @__PURE__ */ new Map();
   #failoverExcluded = /* @__PURE__ */ new Map();
   #lastResolvedKey = /* @__PURE__ */ new Map();
+  #requestKeys;
   patches = [];
   offAdapters = null;
   offStreams = null;
   readyPromise;
-  constructor(ctx, { logger = null, stateStore = null } = {}) {
+  constructor(ctx, { logger = null, stateStore = null, usageLedger = null } = {}) {
     this.ctx = ctx;
     this.credentials = null;
     this.settings = null;
     this.llm = null;
     this.logger = logger ?? console;
     this.stateStore = stateStore ?? new JsonStateStore({
-      filePath: join11(defaultDockyardHome(), "native-key-pools.json")
+      filePath: join12(defaultDockyardHome(), "native-key-pools.json")
     });
+    this.usageLedger = usageLedger ?? new TokenUsageLedger({
+      filePath: join12(defaultDockyardHome(), "token-usage.json"),
+      logger: this.logger
+    });
+    void this.usageLedger.load?.()?.catch((error) => {
+      this.logger.warn?.(`token \u7528\u91CF\u8BB0\u5F55\u521D\u59CB\u5316\u5931\u8D25\uFF1A${error instanceof Error ? error.message : error}`);
+    });
+    this.#requestKeys = new AsyncLocalStorage();
     this.readyPromise = this.loadState();
   }
   resolveServices() {
@@ -9959,6 +10488,8 @@ var NativeKeyPoolHost = class {
         patch.config.resolveApiKey = patch.original;
       }
     }
+    void this.usageLedger?.dispose?.().catch?.(() => {
+    });
   }
   patchAdapters() {
     const adapters = this.llm?.adapters;
@@ -9986,7 +10517,7 @@ var NativeKeyPoolHost = class {
   async syncProvider(providerId, profileHint = null) {
     await this.readyPromise;
     const profile = profileHint ?? nativeProfile(this.ctx, providerId).profile;
-    const activeRef = text(profile?.apiKeyEnv);
+    const activeRef = text2(profile?.apiKeyEnv);
     if (!activeRef) return { profile, activeRef: null, record: this.record(providerId) };
     const record = this.record(providerId);
     if (!record.keys.some((entry) => entry.ref === activeRef)) {
@@ -9996,14 +10527,14 @@ var NativeKeyPoolHost = class {
     return { profile, activeRef, record };
   }
   async register(providerId, ref, label = "") {
-    const keyRef = text(ref);
-    if (!text(providerId) || !keyRef) throw new Error("provider \u548C Key \u5F15\u7528\u4E0D\u80FD\u4E3A\u7A7A");
+    const keyRef = text2(ref);
+    if (!text2(providerId) || !keyRef) throw new Error("provider \u548C Key \u5F15\u7528\u4E0D\u80FD\u4E3A\u7A7A");
     const { record } = await this.syncProvider(providerId);
     const current = record.keys.find((entry) => entry.ref === keyRef);
     if (current) {
-      current.label = text(label) ?? current.label;
+      current.label = text2(label) ?? current.label;
     } else {
-      record.keys.push({ ref: keyRef, label: text(label) ?? `Key ${record.keys.length + 1}`, createdAt: (/* @__PURE__ */ new Date()).toISOString() });
+      record.keys.push({ ref: keyRef, label: text2(label) ?? `Key ${record.keys.length + 1}`, createdAt: (/* @__PURE__ */ new Date()).toISOString() });
     }
     await this.saveState();
     return this.status(providerId);
@@ -10040,18 +10571,46 @@ var NativeKeyPoolHost = class {
     }
     return rows;
   }
+  usageSnapshot(providerId) {
+    try {
+      return this.usageLedger?.snapshot(providerId) ?? null;
+    } catch {
+      return null;
+    }
+  }
   async status(providerId) {
     const synced = await this.syncProvider(providerId);
     const rows = await this.configuredKeys(synced.record);
+    const tokenUsage = this.usageSnapshot(providerId);
     return {
       providerId,
       policy: synced.record.policy,
       activeRef: synced.activeRef,
       runtimeMode: this.patches.length > 0 ? "request-key-pool" : "native-single-key",
-      keys: rows.map((entry) => ({ ...entry, active: entry.ref === synced.activeRef })),
+      keys: rows.map((entry) => ({
+        ...entry,
+        active: entry.ref === synced.activeRef,
+        tokenUsage: tokenUsage?.subjects?.[entry.ref] ?? null
+      })),
+      tokenTotals: tokenUsage?.totals ?? null,
+      tokenUpdatedAt: tokenUsage?.updatedAt ?? null,
       quota: null,
       usage: null
     };
+  }
+  /** Clear recorded token usage for one key ref or the whole provider. */
+  async resetUsage(providerId, ref = null) {
+    await this.readyPromise;
+    let cleared = { providers: 0, subjects: 0 };
+    if (this.usageLedger && text2(providerId)) {
+      cleared = this.usageLedger.reset(providerId, text2(ref));
+      try {
+        await this.usageLedger.flush();
+      } catch (error) {
+        this.logger.warn?.(`token \u7528\u91CF\u91CD\u7F6E\u5199\u5165\u5931\u8D25\uFF1A${error instanceof Error ? error.message : error}`);
+      }
+    }
+    return { ...await this.status(providerId), cleared };
   }
   async pickKey(providerId, record, activeRef, { excluded = [] } = {}) {
     const candidates = [];
@@ -10075,17 +10634,33 @@ var NativeKeyPoolHost = class {
     this.cursors.set(providerId, (cursor + 1) % pool.length);
     return chosen;
   }
+  /**
+   * Remember which key ref backs the current request so token usage can be
+   * attributed per credential. The AsyncLocalStorage store is authoritative
+   * for streams pulled inside this host's middleware; the provider-keyed map
+   * stays as a fallback for resolvers invoked outside that chain.
+   */
+  #trackResolvedKey(providerId, ref) {
+    if (!providerId || !ref) return;
+    const store = this.#requestKeys.getStore();
+    if (store?.provider === providerId) store.ref = ref;
+    this.#lastResolvedKey.set(providerId, ref);
+  }
   async resolveApiKey(providerId, profile, original) {
     const synced = await this.syncProvider(providerId, profile);
     if (!synced.profile || !synced.activeRef || synced.record.policy === "manual" || typeof this.credentials?.resolve !== "function") {
+      if (synced.profile && synced.record.policy === "manual") {
+        this.#trackResolvedKey(providerId, synced.activeRef);
+      }
       return original(providerId, profile);
     }
     const excluded = [...this.#failoverExcluded.get(providerId) ?? []];
     const chosen = await this.pickKey(providerId, synced.record, synced.activeRef, { excluded });
     if (!chosen) return original(providerId, profile);
     if (synced.record.policy === "failover") this.#lastResolvedKey.set(providerId, chosen.ref);
+    this.#trackResolvedKey(providerId, chosen.ref);
     const resolved = await this.credentials.resolve(chosen.ref);
-    const value = text(resolved?.value);
+    const value = text2(resolved?.value);
     if (value) return value;
     return original(providerId, profile);
   }
@@ -10093,66 +10668,171 @@ var NativeKeyPoolHost = class {
     const providerId = "deepseek-official";
     const synced = await this.syncProvider(providerId, connection);
     if (!synced.profile || !synced.activeRef || synced.record.policy === "manual" || typeof this.credentials?.resolve !== "function") {
+      if (synced.profile && synced.record.policy === "manual") {
+        this.#trackResolvedKey(providerId, synced.activeRef);
+      }
       return original(connection);
     }
     const excluded = [...this.#failoverExcluded.get(providerId) ?? []];
     const chosen = await this.pickKey(providerId, synced.record, synced.activeRef, { excluded });
     if (!chosen) return original(connection);
     if (synced.record.policy === "failover") this.#lastResolvedKey.set(providerId, chosen.ref);
+    this.#trackResolvedKey(providerId, chosen.ref);
     const resolved = await this.credentials.resolve(chosen.ref);
-    const value = text(resolved?.value);
+    const value = text2(resolved?.value);
     if (value) return value;
     return original(connection);
   }
+  /**
+   * 多 Key 策略（failover 与 round_robin）都允许在单次请求内换键：
+   * - failover：主键优先，失败后顺延；
+   * - round_robin：起点照常轮转，失败后在本次请求内顺延下一把，
+   *   避免瞬时单 key 失败直接抛给外层重试造成可见报错。
+   * manual 永不换键。共享池限流不参与换键（isSharedUpstreamRateLimit）。
+   */
   shouldRetry(providerId) {
     const record = this.records.get(providerId);
-    return record?.policy === "failover" && record.keys.length > 1;
+    return Boolean(record && record.policy !== "manual" && record.keys.length > 1);
   }
+  /**
+   * Request-scoped attribution context for one llm/stream invocation. The
+   * adapter resolves its API key inside the very first pull of each request —
+   * auth must precede any chunk — so only those leading pulls run inside the
+   * request-scoped AsyncLocalStorage frame. As soon as a real chunk surfaces,
+   * the stream delegates directly and steady-state pass-through keeps the
+   * previous zero-per-chunk overhead. Failover retries that resolve after
+   * delegation attribute via the provider-keyed map, which tracks their
+   * sequential attempts exactly.
+   */
   async *stream(options, next) {
     if (typeof next !== "function") return;
-    if (!this.shouldRetry(options?.provider)) {
+    const providerId = text2(options?.provider);
+    if (!providerId || typeof this.#requestKeys?.run !== "function") {
       yield* next();
       return;
     }
-    const configured = await this.configuredKeys(this.records.get(options.provider));
-    const attempts = Math.max(1, configured.filter((entry) => entry.configured).length);
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      if (attempt > 0) {
-        const used = this.#lastResolvedKey.get(options.provider);
-        if (used) {
-          const excluded = this.#failoverExcluded.get(options.provider) ?? /* @__PURE__ */ new Set();
-          excluded.add(used);
-          this.#failoverExcluded.set(options.provider, excluded);
+    const store = { provider: providerId, ref: null };
+    const iterator = this.#pooledStream(options, next, store);
+    try {
+      while (true) {
+        const result = await this.#requestKeys.run(store, () => iterator.next());
+        if (result.done) return;
+        yield result.value;
+        if (result.value?.type !== void 0) {
+          yield* iterator;
+          return;
         }
       }
-      const buffered = [];
-      let emitted = false;
-      let retryable = false;
-      try {
-        for await (const chunk of next()) {
-          if (VISIBLE_STREAM_CHUNKS.has(chunk?.type)) emitted = true;
-          if (!emitted) buffered.push(chunk);
-          else if (buffered.length > 0) {
-            yield* buffered.splice(0);
-            yield chunk;
-          } else yield chunk;
-          if (chunk?.type === "finish" && chunk.reason?.kind === "error") {
-            retryable = !emitted;
-            if (retryable && attempt + 1 < attempts) break;
-          }
-        }
-      } catch (error) {
-        retryable = !emitted && retryableStreamError(error);
-        if (!retryable || attempt + 1 >= attempts) throw error;
+    } finally {
+      await Promise.resolve(iterator.return?.()).catch(() => {
+      });
+    }
+  }
+  #currentAttributionRef(store, providerId) {
+    return store?.ref ?? this.#lastResolvedKey.get(providerId) ?? null;
+  }
+  #recordTokenUsage(providerId, ref, info) {
+    if (!providerId || !ref) return;
+    try {
+      this.usageLedger?.record(providerId, ref, info);
+    } catch {
+    }
+  }
+  async *#consumeOnce(options, next, store) {
+    const providerId = store.provider;
+    const model = text2(options?.model);
+    let usage = null;
+    let failedFinish = false;
+    try {
+      for await (const chunk of next()) {
+        if (chunk?.type === "usage" && chunk.usage) usage = chunk.usage;
+        if (chunk?.type === "finish") failedFinish = chunk.reason?.kind === "error";
+        yield chunk;
       }
-      if (retryable && !emitted && attempt + 1 < attempts) continue;
-      if (buffered.length > 0) yield* buffered;
-      this.#failoverExcluded.delete(options.provider);
-      this.#lastResolvedKey.delete(options.provider);
+    } catch (error) {
+      this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+        status: "failure",
+        usage,
+        model
+      });
+      throw error;
+    }
+    this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+      status: failedFinish ? "failure" : "success",
+      usage,
+      model
+    });
+  }
+  async *#pooledStream(options, next, store) {
+    const providerId = store.provider;
+    if (!this.shouldRetry(providerId)) {
+      yield* this.#consumeOnce(options, next, store);
       return;
     }
-    this.#failoverExcluded.delete(options.provider);
-    this.#lastResolvedKey.delete(options.provider);
+    const configured = await this.configuredKeys(this.records.get(providerId));
+    const attempts = Math.max(1, configured.filter((entry) => entry.configured).length);
+    try {
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        if (attempt > 0) {
+          const used = this.#lastResolvedKey.get(providerId);
+          if (used) {
+            const excluded = this.#failoverExcluded.get(providerId) ?? /* @__PURE__ */ new Set();
+            excluded.add(used);
+            this.#failoverExcluded.set(providerId, excluded);
+          }
+        }
+        store.ref = null;
+        const buffered = [];
+        let emitted = false;
+        let retryable = false;
+        let failedFinish = false;
+        let attemptUsage = null;
+        try {
+          for await (const chunk of next()) {
+            if (chunk?.type === "usage" && chunk.usage) attemptUsage = chunk.usage;
+            if (VISIBLE_STREAM_CHUNKS.has(chunk?.type)) emitted = true;
+            if (!emitted) buffered.push(chunk);
+            else if (buffered.length > 0) {
+              yield* buffered.splice(0);
+              yield chunk;
+            } else yield chunk;
+            if (chunk?.type === "finish" && chunk.reason?.kind === "error") {
+              failedFinish = true;
+              retryable = !emitted && !isSharedUpstreamRateLimit(chunk.reason.failure);
+              if (retryable && attempt + 1 < attempts) break;
+            }
+          }
+        } catch (error) {
+          retryable = !emitted && retryableStreamError(error);
+          if (!retryable || attempt + 1 >= attempts) {
+            this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+              status: "failure",
+              usage: attemptUsage,
+              model: text2(options?.model)
+            });
+            throw error;
+          }
+        }
+        if (retryable && !emitted && attempt + 1 < attempts) {
+          this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+            status: "failure",
+            usage: attemptUsage,
+            model: text2(options?.model)
+          });
+          continue;
+        }
+        if (buffered.length > 0) yield* buffered;
+        this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+          status: failedFinish ? "failure" : "success",
+          usage: attemptUsage,
+          model: text2(options?.model)
+        });
+        return;
+      }
+    } finally {
+      this.#failoverExcluded.delete(providerId);
+      this.#lastResolvedKey.delete(providerId);
+    }
   }
   async refreshUsage(providerId, signal) {
     const synced = await this.syncProvider(providerId);
@@ -10166,7 +10846,7 @@ var NativeKeyPoolHost = class {
       } else {
         try {
           const resolved = await this.credentials.resolve(row.ref);
-          const apiKey = text(resolved?.value);
+          const apiKey = text2(resolved?.value);
           usage = apiKey ? await module.fetch({ providerId, profile: synced.profile, apiKey, signal }) : { status: "unconfigured", message: "\u8BE5 Key \u5C1A\u672A\u914D\u7F6E" };
         } catch (error) {
           usage = { status: "error", message: failureMessage(error), updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
@@ -10175,14 +10855,17 @@ var NativeKeyPoolHost = class {
       nextRows.push({ ...row, active: row.ref === synced.activeRef, usage, quota: usage?.quota ?? null });
     }
     const active = nextRows.find((entry) => entry.active) ?? nextRows[0] ?? null;
+    const tokenUsage = this.usageSnapshot(providerId);
     return {
       providerId,
       policy: synced.record.policy,
       activeRef: synced.activeRef,
       runtimeMode: this.patches.length > 0 ? "request-key-pool" : "native-single-key",
-      keys: nextRows,
+      keys: nextRows.map((entry) => ({ ...entry, tokenUsage: tokenUsage?.subjects?.[entry.ref] ?? null })),
       usage: active?.usage ?? { status: "unsupported", message: "provider \u5C1A\u672A\u8FD4\u56DE\u989D\u5EA6\u6570\u636E" },
       quota: active?.quota ?? null,
+      tokenTotals: tokenUsage?.totals ?? null,
+      tokenUpdatedAt: tokenUsage?.updatedAt ?? null,
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     };
   }
@@ -10202,6 +10885,9 @@ function contextLogger(ctx, name2) {
 function apply(ctx, config = {}) {
   const runtimeOptions = { ...config.runtimeOptions ?? {} };
   let catalogWarmers = [];
+  const usageLedger = config.usageLedger ?? new TokenUsageLedger({
+    logger: contextLogger(ctx, "dockyard-dsh")
+  });
   if (!config.runtime && !runtimeOptions.providers) {
     const antigravityOptions = {
       ...runtimeOptions.antigravity ?? {}
@@ -10232,6 +10918,7 @@ function apply(ctx, config = {}) {
       cursor: runtimeOptions.catalogLoaders?.cursor ?? createCursorCatalogLoader(runtimeOptions.cursor ?? {})
     };
     runtimeOptions.providers = createDefaultProviderEntries(runtimeOptions);
+    runtimeOptions.usageLedger = runtimeOptions.usageLedger ?? usageLedger;
     catalogWarmers = Object.entries(runtimeOptions.catalogLoaders).filter(([, loader]) => typeof loader === "function");
   }
   const runtime = config.runtime ?? new DockyardRuntime(runtimeOptions);
@@ -10286,7 +10973,8 @@ function apply(ctx, config = {}) {
         contextLogger(ctx, "dockyard-dsh").warn?.(`DSH Credentials \u63A5\u5165\u5931\u8D25\uFF0C\u5C06\u4FDD\u7559\u539F\u6709\u5B89\u5168\u5B58\u50A8\uFF1A${error.message}`);
       }
       nativeKeyPool ??= new NativeKeyPoolHost(ctx, {
-        logger: config.serviceOptions?.logger ?? contextLogger(ctx, "dockyard-dsh")
+        logger: config.serviceOptions?.logger ?? contextLogger(ctx, "dockyard-dsh"),
+        usageLedger
       });
       const nativeKeyPoolReady = nativeKeyPool.start();
       void nativeKeyPoolReady.catch((error) => {

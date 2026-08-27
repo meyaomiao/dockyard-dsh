@@ -332,12 +332,50 @@ export function createGrokCatalogLoader({
   let cached = null;
   let cachedAt = 0;
   let pending = null;
+  let pendingRefresh = null;
+
+  async function refreshLive(cache) {
+    if (pendingRefresh) return pendingRefresh;
+    pendingRefresh = (async () => {
+      try {
+        if (typeof commandRunner !== "function") return cached;
+        const result = await commandRunner(cliPath, ["models"], {
+          env,
+          timeoutMs,
+          providerId: PROVIDER_ID,
+        });
+        const models = parseGrokModelCatalog(result.output, cache);
+        if (models.length > 0) {
+          cached = { models, source: "official_grok_cli" };
+          cachedAt = Date.now();
+        }
+      } catch {
+        // A persisted catalog remains usable when the official CLI is slow
+        // or unavailable; the next request can retry the background refresh.
+      }
+      return cached;
+    })().finally(() => {
+      pendingRefresh = null;
+    });
+    return pendingRefresh;
+  }
+
   return async function loadCatalog({ force = false } = {}) {
     const now = Date.now();
     if (!force && cached && now - cachedAt < cacheTtlMs) return cached;
     if (pending) return pending;
     pending = (async () => {
       const cache = await readJson(join(resolvedHome, "models_cache.json"));
+      const localModels = parseGrokModelCatalog("", cache);
+      if (!force && localModels.length > 0) {
+        cached = {
+          models: localModels,
+          source: "official_grok_local_cache",
+        };
+        cachedAt = Date.now();
+        void refreshLive(cache);
+        return cached;
+      }
       let value;
       if (typeof commandRunner === "function") {
         try {

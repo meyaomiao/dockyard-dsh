@@ -44,8 +44,10 @@ async function openAiContent(content, attachments) {
       continue;
     }
     const call = toolCallPart(part);
+    // Skip tool-call parts (fix 2026-08-28): assistant history already carries them
+    // natively via tool_calls; flattening them into "[Tool Call ...]" text teaches the
+    // model to imitate the convention as plain text, which ends the turn silently.
     if (call) {
-      blocks.push({ type: "text", text: `[Tool Call ${call.name ?? call.function?.name ?? "tool"}] ${JSON.stringify(parseToolArguments(call.arguments ?? call.input ?? call.function?.arguments))}` });
       continue;
     }
     const text = textFromContent(part);

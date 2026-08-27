@@ -69,6 +69,11 @@ const nativeKeyPolicyRequest = z.object({
   policy: z.enum(["manual", "round_robin", "failover"]),
 });
 
+const usageResetRequest = z.object({
+  providerId: z.string().min(1),
+  ref: z.string().min(1).optional(),
+});
+
 function requestParameter(schema, name) {
   return {
     name: "request",
@@ -107,6 +112,7 @@ export const TYPERT_DESCRIPTORS = Object.freeze([
   descriptor("nativeKeyRegister", requestParameter(nativeKeyRegisterRequest, "DockyardNativeKeyRegisterRequest"), "DockyardNativeKeyRegister"),
   descriptor("nativeKeyUnregister", requestParameter(nativeKeyRefRequest, "DockyardNativeKeyRefRequest"), "DockyardNativeKeyUnregister"),
   descriptor("nativeKeySetPolicy", requestParameter(nativeKeyPolicyRequest, "DockyardNativeKeyPolicyRequest"), "DockyardNativeKeySetPolicy"),
+  descriptor("usageReset", requestParameter(usageResetRequest, "DockyardUsageResetRequest"), "DockyardUsageReset"),
 ]);
 
 export const TYPERT_MODEL = Object.freeze({

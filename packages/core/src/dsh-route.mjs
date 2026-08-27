@@ -55,7 +55,7 @@ function providerAccount(account, auth) {
   };
 }
 
-export function createProviderRoute({ providerModule, accountPool }) {
+export function createProviderRoute({ providerModule, accountPool, usageSink = null }) {
   if (!providerModule?.manifest?.id) throw new ValidationError("Provider module is required");
   if (!accountPool?.select || !accountPool?.resolve) throw new ValidationError("Account pool is required");
   if (accountPool.providerId !== providerModule.manifest.id) {
@@ -64,6 +64,17 @@ export function createProviderRoute({ providerModule, accountPool }) {
       poolProviderId: accountPool.providerId,
     });
   }
+
+  // Usage reporting is best-effort telemetry: a broken sink must never break
+  // or alter the provider request itself.
+  const reportUsage = (accountId, info) => {
+    if (typeof usageSink !== "function") return;
+    try {
+      usageSink(providerModule.manifest.id, accountId, info);
+    } catch {
+      // Ignore sink failures by design.
+    }
+  };
 
   return {
     providerId: providerModule.manifest.id,
@@ -92,12 +103,22 @@ export function createProviderRoute({ providerModule, accountPool }) {
             quota: response?.quota,
             refresh: response?.refresh,
           });
+          reportUsage(account.accountId, {
+            status: "success",
+            usage: response?.usage ?? null,
+            model: request?.model ?? null,
+          });
           return response;
         } catch (error) {
           accountPool.report(account.accountId, {
             status: failureStatus(error),
             cooldownUntil: failureCooldown(error, selectedAccount),
             message: error?.message,
+          });
+          reportUsage(account.accountId, {
+            status: "failure",
+            usage: error?.usage ?? null,
+            model: request?.model ?? null,
           });
           if (!shouldFailover(error, accountPool, context)) throw error;
           lastError = error;
@@ -121,9 +142,11 @@ export function createProviderRoute({ providerModule, accountPool }) {
           const selectedAccount = providerAccount(account, auth);
           const pending = [];
           let hasOutput = false;
+          let lastUsage = null;
           try {
             const output = providerModule.stream(request, { account: selectedAccount, auth }, context);
             for await (const chunk of await output) {
+              if (chunk?.type === "usage" && chunk.usage) lastUsage = chunk.usage;
               if (!hasOutput && !hasSubstantiveStreamOutput(chunk)) {
                 pending.push(chunk);
                 continue;
@@ -141,12 +164,22 @@ export function createProviderRoute({ providerModule, accountPool }) {
               throw error;
             }
             accountPool.report(account.accountId, { status: "success" });
+            reportUsage(account.accountId, {
+              status: "success",
+              usage: lastUsage,
+              model: request?.model ?? null,
+            });
             return;
           } catch (error) {
             accountPool.report(account.accountId, {
               status: failureStatus(error),
               cooldownUntil: failureCooldown(error, selectedAccount),
               message: error?.message,
+            });
+            reportUsage(account.accountId, {
+              status: "failure",
+              usage: lastUsage,
+              model: request?.model ?? null,
             });
             if (!hasOutput && shouldFailover(error, accountPool, context)) {
               lastError = error;

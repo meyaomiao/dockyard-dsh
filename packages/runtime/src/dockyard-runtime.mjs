@@ -179,11 +179,21 @@ export class DockyardRuntime {
     stateStore = new JsonStateStore(),
     secretStore = createDefaultSecretStore(),
     dshAdapter = null,
+    usageSink = null,
+    usageLedger = null,
     refreshTimeoutMs = numericOption(process.env.DOCKYARD_DSH_REFRESH_TIMEOUT_MS, DEFAULT_REFRESH_TIMEOUT_MS),
   } = {}) {
     this.runtime = runtime;
     this.stateStore = stateStore;
     this.secretStore = secretStore;
+    // Token usage attribution: an explicit sink wins; otherwise one is built
+    // on top of the shared duck-typed ledger (record/snapshot/reset API).
+    this.usageLedger = usageLedger ?? null;
+    this.usageSink = typeof usageSink === "function"
+      ? usageSink
+      : this.usageLedger
+        ? (providerId, accountId, info) => this.usageLedger.record(providerId, accountId, info)
+        : null;
     this.bridge = new DshInjectionBridge({ runtime, adapter: dshAdapter });
     this.providers = providers;
     this.refreshTimeoutMs = refreshTimeoutMs;
@@ -222,7 +232,7 @@ export class DockyardRuntime {
         // Dockyard integration starts. Reuse that registration instead of
         // aborting the whole subscription snapshot with a module conflict.
         if (!this.runtime.has(providerId)) await this.runtime.register(entry.module);
-        await this.bridge.mountProvider(entry.module, pool);
+        await this.bridge.mountProvider(entry.module, pool, { usageSink: this.usageSink });
       }
       this.#initialized = true;
       return this;
@@ -632,13 +642,25 @@ export class DockyardRuntime {
   snapshot() {
     return {
       generatedAt: new Date().toISOString(),
-      providers: [...this.#entries].map(([providerId, entry]) => ({
-        providerId,
-        manifest: { ...entry.module.manifest },
-        policy: entry.pool.policy,
-        defaultAccountId: entry.pool.getDefaultAccountId(),
-        accounts: entry.pool.list(),
-      })),
+      providers: [...this.#entries].map(([providerId, entry]) => {
+        let usage = null;
+        try {
+          usage = this.usageLedger?.snapshot?.(providerId) ?? null;
+        } catch {
+          usage = null;
+        }
+        return {
+          providerId,
+          manifest: { ...entry.module.manifest },
+          policy: entry.pool.policy,
+          defaultAccountId: entry.pool.getDefaultAccountId(),
+          accounts: entry.pool.list().map((account) => ({
+            ...account,
+            tokenUsage: usage?.subjects?.[account.accountId] ?? null,
+          })),
+          tokenTotals: usage?.totals ?? null,
+        };
+      }),
       routes: this.bridge.listRoutes(),
     };
   }

@@ -1,12 +1,25 @@
 import { JsonStateStore, defaultDockyardHome } from "../../runtime/src/state-store.mjs";
 import { join } from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { usageModuleFor } from "./native-usage.mjs";
+import { TokenUsageLedger } from "./token-usage-ledger.mjs";
 
 const POLICIES = new Set(["manual", "round_robin", "failover"]);
 const PATCH_MARK = Symbol("dockyard-native-key-pool");
 const VISIBLE_STREAM_CHUNKS = new Set(["text-delta", "reasoning-delta", "tool-call-delta"]);
 
+function isSharedUpstreamRateLimit(error) {
+  const details = [
+    error?.message,
+    error?.metadata?.limit_source,
+    error?.metadata?.raw,
+  ].filter((value) => typeof value === "string").join(" ");
+  return details.includes("upstream_provider_shared_pool")
+    || details.includes("temporarily rate-limited upstream");
+}
+
 function retryableStreamError(error) {
+  if (isSharedUpstreamRateLimit(error)) return false;
   return Boolean(
     error?.rateLimited
       || error?.quotaExhausted
@@ -77,12 +90,13 @@ export class NativeKeyPoolHost {
   cursors = new Map();
   #failoverExcluded = new Map();
   #lastResolvedKey = new Map();
+  #requestKeys;
   patches = [];
   offAdapters = null;
   offStreams = null;
   readyPromise;
 
-  constructor(ctx, { logger = null, stateStore = null } = {}) {
+  constructor(ctx, { logger = null, stateStore = null, usageLedger = null } = {}) {
     this.ctx = ctx;
     // The plugin constructor can run while Cordis is still composing the
     // profile. Resolve services in start(), after the fiber is active; reading
@@ -97,6 +111,20 @@ export class NativeKeyPoolHost {
     this.stateStore = stateStore ?? new JsonStateStore({
       filePath: join(defaultDockyardHome(), "native-key-pools.json"),
     });
+    // Token usage lives in its own state file so pool metadata writes can
+    // never truncate usage history (and vice versa). A shared ledger can be
+    // injected so OAuth accounts and API keys report into one store.
+    this.usageLedger = usageLedger ?? new TokenUsageLedger({
+      filePath: join(defaultDockyardHome(), "token-usage.json"),
+      logger: this.logger,
+    });
+    void this.usageLedger.load?.()?.catch((error) => {
+      this.logger.warn?.(`token 用量记录初始化失败：${error instanceof Error ? error.message : error}`);
+    });
+    // Request-scoped attribution: resolveApiKey stamps the chosen ref into the
+    // running stream's context so concurrent streams each record their own key
+    // even under round-robin rotation.
+    this.#requestKeys = new AsyncLocalStorage();
     this.readyPromise = this.loadState();
   }
 
@@ -159,6 +187,8 @@ export class NativeKeyPoolHost {
         patch.config.resolveApiKey = patch.original;
       }
     }
+    // Flush pending usage writes; never let teardown fail the host.
+    void this.usageLedger?.dispose?.().catch?.(() => {});
   }
 
   patchAdapters() {
@@ -255,18 +285,48 @@ export class NativeKeyPoolHost {
     return rows;
   }
 
+  usageSnapshot(providerId) {
+    try {
+      return this.usageLedger?.snapshot(providerId) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async status(providerId) {
     const synced = await this.syncProvider(providerId);
     const rows = await this.configuredKeys(synced.record);
+    const tokenUsage = this.usageSnapshot(providerId);
     return {
       providerId,
       policy: synced.record.policy,
       activeRef: synced.activeRef,
       runtimeMode: this.patches.length > 0 ? "request-key-pool" : "native-single-key",
-      keys: rows.map((entry) => ({ ...entry, active: entry.ref === synced.activeRef })),
+      keys: rows.map((entry) => ({
+        ...entry,
+        active: entry.ref === synced.activeRef,
+        tokenUsage: tokenUsage?.subjects?.[entry.ref] ?? null,
+      })),
+      tokenTotals: tokenUsage?.totals ?? null,
+      tokenUpdatedAt: tokenUsage?.updatedAt ?? null,
       quota: null,
       usage: null,
     };
+  }
+
+  /** Clear recorded token usage for one key ref or the whole provider. */
+  async resetUsage(providerId, ref = null) {
+    await this.readyPromise;
+    let cleared = { providers: 0, subjects: 0 };
+    if (this.usageLedger && text(providerId)) {
+      cleared = this.usageLedger.reset(providerId, text(ref));
+      try {
+        await this.usageLedger.flush();
+      } catch (error) {
+        this.logger.warn?.(`token 用量重置写入失败：${error instanceof Error ? error.message : error}`);
+      }
+    }
+    return { ...(await this.status(providerId)), cleared };
   }
 
   async pickKey(providerId, record, activeRef, { excluded = [] } = {}) {
@@ -295,15 +355,34 @@ export class NativeKeyPoolHost {
     return chosen;
   }
 
+  /**
+   * Remember which key ref backs the current request so token usage can be
+   * attributed per credential. The AsyncLocalStorage store is authoritative
+   * for streams pulled inside this host's middleware; the provider-keyed map
+   * stays as a fallback for resolvers invoked outside that chain.
+   */
+  #trackResolvedKey(providerId, ref) {
+    if (!providerId || !ref) return;
+    const store = this.#requestKeys.getStore();
+    if (store?.provider === providerId) store.ref = ref;
+    this.#lastResolvedKey.set(providerId, ref);
+  }
+
   async resolveApiKey(providerId, profile, original) {
     const synced = await this.syncProvider(providerId, profile);
     if (!synced.profile || !synced.activeRef || synced.record.policy === "manual" || typeof this.credentials?.resolve !== "function") {
+      // Manual policy keeps DSH's own active key; attribution falls back to
+      // the active ref, which is exactly the credential being used.
+      if (synced.profile && synced.record.policy === "manual") {
+        this.#trackResolvedKey(providerId, synced.activeRef);
+      }
       return original(providerId, profile);
     }
     const excluded = [...(this.#failoverExcluded.get(providerId) ?? [])];
     const chosen = await this.pickKey(providerId, synced.record, synced.activeRef, { excluded });
     if (!chosen) return original(providerId, profile);
     if (synced.record.policy === "failover") this.#lastResolvedKey.set(providerId, chosen.ref);
+    this.#trackResolvedKey(providerId, chosen.ref);
     const resolved = await this.credentials.resolve(chosen.ref);
     const value = text(resolved?.value);
     if (value) return value;
@@ -314,72 +393,182 @@ export class NativeKeyPoolHost {
     const providerId = "deepseek-official";
     const synced = await this.syncProvider(providerId, connection);
     if (!synced.profile || !synced.activeRef || synced.record.policy === "manual" || typeof this.credentials?.resolve !== "function") {
+      if (synced.profile && synced.record.policy === "manual") {
+        this.#trackResolvedKey(providerId, synced.activeRef);
+      }
       return original(connection);
     }
     const excluded = [...(this.#failoverExcluded.get(providerId) ?? [])];
     const chosen = await this.pickKey(providerId, synced.record, synced.activeRef, { excluded });
     if (!chosen) return original(connection);
     if (synced.record.policy === "failover") this.#lastResolvedKey.set(providerId, chosen.ref);
+    this.#trackResolvedKey(providerId, chosen.ref);
     const resolved = await this.credentials.resolve(chosen.ref);
     const value = text(resolved?.value);
     if (value) return value;
     return original(connection);
   }
 
+  /**
+   * 多 Key 策略（failover 与 round_robin）都允许在单次请求内换键：
+   * - failover：主键优先，失败后顺延；
+   * - round_robin：起点照常轮转，失败后在本次请求内顺延下一把，
+   *   避免瞬时单 key 失败直接抛给外层重试造成可见报错。
+   * manual 永不换键。共享池限流不参与换键（isSharedUpstreamRateLimit）。
+   */
   shouldRetry(providerId) {
     const record = this.records.get(providerId);
-    return record?.policy === "failover" && record.keys.length > 1;
+    return Boolean(record && record.policy !== "manual" && record.keys.length > 1);
   }
 
+  /**
+   * Request-scoped attribution context for one llm/stream invocation. The
+   * adapter resolves its API key inside the very first pull of each request —
+   * auth must precede any chunk — so only those leading pulls run inside the
+   * request-scoped AsyncLocalStorage frame. As soon as a real chunk surfaces,
+   * the stream delegates directly and steady-state pass-through keeps the
+   * previous zero-per-chunk overhead. Failover retries that resolve after
+   * delegation attribute via the provider-keyed map, which tracks their
+   * sequential attempts exactly.
+   */
   async *stream(options, next) {
     if (typeof next !== "function") return;
-    if (!this.shouldRetry(options?.provider)) {
+    const providerId = text(options?.provider);
+    if (!providerId || typeof this.#requestKeys?.run !== "function") {
       yield* next();
       return;
     }
-    const configured = await this.configuredKeys(this.records.get(options.provider));
-    const attempts = Math.max(1, configured.filter((entry) => entry.configured).length);
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      // Failover semantics: the first attempt uses the primary key; each
-      // retry excludes the key that just failed so the next attempt advances
-      // to the next configured key. The exclusion set is cleared when the
-      // stream settles so healthy requests return to the primary key.
-      if (attempt > 0) {
-        const used = this.#lastResolvedKey.get(options.provider);
-        if (used) {
-          const excluded = this.#failoverExcluded.get(options.provider) ?? new Set();
-          excluded.add(used);
-          this.#failoverExcluded.set(options.provider, excluded);
+    const store = { provider: providerId, ref: null };
+    const iterator = this.#pooledStream(options, next, store);
+    try {
+      while (true) {
+        const result = await this.#requestKeys.run(store, () => iterator.next());
+        if (result.done) return;
+        yield result.value;
+        if (result.value?.type !== undefined) {
+          yield* iterator;
+          return;
         }
       }
-      const buffered = [];
-      let emitted = false;
-      let retryable = false;
-      try {
-        for await (const chunk of next()) {
-          if (VISIBLE_STREAM_CHUNKS.has(chunk?.type)) emitted = true;
-          if (!emitted) buffered.push(chunk);
-          else if (buffered.length > 0) {
-            yield* buffered.splice(0);
-            yield chunk;
-          } else yield chunk;
-          if (chunk?.type === "finish" && chunk.reason?.kind === "error") {
-            retryable = !emitted;
-            if (retryable && attempt + 1 < attempts) break;
-          }
-        }
-      } catch (error) {
-        retryable = !emitted && retryableStreamError(error);
-        if (!retryable || attempt + 1 >= attempts) throw error;
+    } finally {
+      await Promise.resolve(iterator.return?.()).catch(() => {});
+    }
+  }
+
+  #currentAttributionRef(store, providerId) {
+    return store?.ref ?? this.#lastResolvedKey.get(providerId) ?? null;
+  }
+
+  #recordTokenUsage(providerId, ref, info) {
+    if (!providerId || !ref) return;
+    try {
+      this.usageLedger?.record(providerId, ref, info);
+    } catch {
+      // Usage bookkeeping must never break or alter the streamed response.
+    }
+  }
+
+  async *#consumeOnce(options, next, store) {
+    const providerId = store.provider;
+    const model = text(options?.model);
+    let usage = null;
+    let failedFinish = false;
+    try {
+      for await (const chunk of next()) {
+        if (chunk?.type === "usage" && chunk.usage) usage = chunk.usage;
+        if (chunk?.type === "finish") failedFinish = chunk.reason?.kind === "error";
+        yield chunk;
       }
-      if (retryable && !emitted && attempt + 1 < attempts) continue;
-      if (buffered.length > 0) yield* buffered;
-      this.#failoverExcluded.delete(options.provider);
-      this.#lastResolvedKey.delete(options.provider);
+    } catch (error) {
+      this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+        status: "failure",
+        usage,
+        model,
+      });
+      throw error;
+    }
+    this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+      status: failedFinish ? "failure" : "success",
+      usage,
+      model,
+    });
+  }
+
+  async *#pooledStream(options, next, store) {
+    const providerId = store.provider;
+    if (!this.shouldRetry(providerId)) {
+      yield* this.#consumeOnce(options, next, store);
       return;
     }
-    this.#failoverExcluded.delete(options.provider);
-    this.#lastResolvedKey.delete(options.provider);
+    const configured = await this.configuredKeys(this.records.get(providerId));
+    const attempts = Math.max(1, configured.filter((entry) => entry.configured).length);
+    try {
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        // Failover semantics: the first attempt uses the primary key; each
+        // retry excludes the key that just failed so the next attempt advances
+        // to the next configured key. The exclusion set is cleared when the
+        // stream settles so healthy requests return to the primary key.
+        if (attempt > 0) {
+          const used = this.#lastResolvedKey.get(providerId);
+          if (used) {
+            const excluded = this.#failoverExcluded.get(providerId) ?? new Set();
+            excluded.add(used);
+            this.#failoverExcluded.set(providerId, excluded);
+          }
+        }
+        // Each attempt resolves its own key; reset attribution before pulling.
+        store.ref = null;
+        const buffered = [];
+        let emitted = false;
+        let retryable = false;
+        let failedFinish = false;
+        let attemptUsage = null;
+        try {
+          for await (const chunk of next()) {
+            if (chunk?.type === "usage" && chunk.usage) attemptUsage = chunk.usage;
+            if (VISIBLE_STREAM_CHUNKS.has(chunk?.type)) emitted = true;
+            if (!emitted) buffered.push(chunk);
+            else if (buffered.length > 0) {
+              yield* buffered.splice(0);
+              yield chunk;
+            } else yield chunk;
+            if (chunk?.type === "finish" && chunk.reason?.kind === "error") {
+              failedFinish = true;
+              retryable = !emitted && !isSharedUpstreamRateLimit(chunk.reason.failure);
+              if (retryable && attempt + 1 < attempts) break;
+            }
+          }
+        } catch (error) {
+          retryable = !emitted && retryableStreamError(error);
+          if (!retryable || attempt + 1 >= attempts) {
+            this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+              status: "failure",
+              usage: attemptUsage,
+              model: text(options?.model),
+            });
+            throw error;
+          }
+        }
+        if (retryable && !emitted && attempt + 1 < attempts) {
+          this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+            status: "failure",
+            usage: attemptUsage,
+            model: text(options?.model),
+          });
+          continue;
+        }
+        if (buffered.length > 0) yield* buffered;
+        this.#recordTokenUsage(providerId, this.#currentAttributionRef(store, providerId), {
+          status: failedFinish ? "failure" : "success",
+          usage: attemptUsage,
+          model: text(options?.model),
+        });
+        return;
+      }
+    } finally {
+      this.#failoverExcluded.delete(providerId);
+      this.#lastResolvedKey.delete(providerId);
+    }
   }
 
   async refreshUsage(providerId, signal) {
@@ -405,14 +594,17 @@ export class NativeKeyPoolHost {
       nextRows.push({ ...row, active: row.ref === synced.activeRef, usage, quota: usage?.quota ?? null });
     }
     const active = nextRows.find((entry) => entry.active) ?? nextRows[0] ?? null;
+    const tokenUsage = this.usageSnapshot(providerId);
     return {
       providerId,
       policy: synced.record.policy,
       activeRef: synced.activeRef,
       runtimeMode: this.patches.length > 0 ? "request-key-pool" : "native-single-key",
-      keys: nextRows,
+      keys: nextRows.map((entry) => ({ ...entry, tokenUsage: tokenUsage?.subjects?.[entry.ref] ?? null })),
       usage: active?.usage ?? { status: "unsupported", message: "provider 尚未返回额度数据" },
       quota: active?.quota ?? null,
+      tokenTotals: tokenUsage?.totals ?? null,
+      tokenUpdatedAt: tokenUsage?.updatedAt ?? null,
       updatedAt: new Date().toISOString(),
     };
   }

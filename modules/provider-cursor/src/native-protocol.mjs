@@ -198,14 +198,13 @@ function encodeConversationState(messages, blobStore, requestId) {
     roots.push(jsonBlob(blobStore, { role: "user", content: [{ type: "text", text: resultText }] }));
     turnRecords.at(-1)?.steps.push(putBlob(blobStore, encodeAssistantStep(resultText)));
   }
-  for (const record of turnRecords.slice(0, -1)) {
-    const userMessageId = putBlob(blobStore, encodeUserMessage(record.text, randomUUID()));
-    const turn = encodeConversationTurn(userMessageId, record.steps, requestId);
-    turns.push(putBlob(blobStore, turn));
-  }
+  // Turns omitted (fix 2026-08-28): the server depth-decodes turn blobs with its own
+  // schema; our guessed field layout derails its decoder => "illegal tag: field no N
+  // wire type 6/7", "cant skip wire type 4", "premature EOF". Full history is already
+  // inlined into the current user message, so turns are not required. Verified live
+  // against agent.api5.cursor.sh: roots-only completes where roots+turns fails.
   return concatBytes([
     ...roots.map((id) => bytesField(1, id)),
-    ...turns.map((id) => bytesField(8, id)),
   ]);
 }
 
@@ -392,6 +391,23 @@ export function encodeKvResponse(request, blobs) {
 
 export function decodeCursorKvRequest(message) {
   return decodeKvRequest(message);
+}
+
+/**
+ * [本地增强] 识别服务端的会话截断标志帧。
+ * 当对话历史超过 AgentService 的上下文预算时，服务器会在发完整结果前
+ * 追加一个不含错误 trailer 的特殊标志（KV 结构里带 "truncate" 字样），
+ * 期望客户端据此截短历史后重发。旧版传输忽略它 → 残包留在缓冲区，
+ * stream 结束时报 CURSOR_INCOMPLETE_RESPONSE / premature EOF。
+ */
+export function decodeCursorTruncateFlag(payload) {
+  try {
+    if (!payload || payload.length < 4) return false;
+    const needle = Buffer.from("truncate");
+    return Buffer.from(payload).includes(needle);
+  } catch {
+    return false;
+  }
 }
 
 export function decodeCursorToolMessage(_message) {

@@ -155,6 +155,8 @@ export class NativeKeyPoolController {
     runtimeMode: "request-key-pool",
     quota: null,
     usage: null,
+    tokenTotals: null,
+    tokenUpdatedAt: null,
   });
   generation = 0;
 
@@ -186,6 +188,8 @@ export class NativeKeyPoolController {
       ...(typeof host.runtimeMode === "string" ? { runtimeMode: host.runtimeMode } : {}),
       ...(Object.hasOwn(host, "quota") ? { quota: host.quota } : {}),
       ...(Object.hasOwn(host, "usage") ? { usage: host.usage } : {}),
+      ...(Object.hasOwn(host, "tokenTotals") ? { tokenTotals: host.tokenTotals } : {}),
+      ...(Object.hasOwn(host, "tokenUpdatedAt") ? { tokenUpdatedAt: host.tokenUpdatedAt } : {}),
     });
   }
 
@@ -210,6 +214,8 @@ export class NativeKeyPoolController {
       runtimeMode: "request-key-pool",
       quota: null,
       usage: null,
+      tokenTotals: null,
+      tokenUpdatedAt: null,
       error: null,
       message: null,
     });
@@ -420,6 +426,32 @@ export class NativeKeyPoolController {
       return this.store.getSnapshot();
     } catch (error) {
       this.setState({ action: null, status: "error", providerId, error: errorMessage(error, this.t) });
+      return null;
+    }
+  }
+
+  /** Clear local token usage records for one key or the whole provider. */
+  async resetUsage(providerId, ref = null) {
+    this.setState({ action: "resetUsage", status: "loading", providerId, error: null, message: null });
+    try {
+      await this.ensure(providerId);
+      const refreshed = await this.remoteCall(
+        "usageReset",
+        ref ? { providerId, ref } : { providerId },
+        this.operation("native.operation.resetUsage", "Reset token usage records"),
+      );
+      if (refreshed) this.applyHostStatus(refreshed);
+      await this.load(providerId);
+      this.setState({
+        message: ref
+          ? this.t?.("native.message.usageClearedKey") ?? "Token usage for this Key has been cleared."
+          : this.t?.("native.message.usageClearedProvider") ?? "Token usage for this provider has been cleared.",
+        action: null,
+        status: "ready",
+      });
+      return this.store.getSnapshot();
+    } catch (error) {
+      this.setState({ action: null, status: "ready", error: errorMessage(error, this.t) });
       return null;
     }
   }

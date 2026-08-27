@@ -43,7 +43,7 @@ module.exports = __toCommonJS(dockyard_client_exports);
 var React = __toESM(require("react"), 1);
 var import_client2 = require("@deepseek-ai/dsh-client-runtime/client");
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
 var external_exports = {};
 __export(external_exports, {
   $brand: () => $brand,
@@ -286,7 +286,7 @@ __export(external_exports, {
   xor: () => xor
 });
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/index.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/index.js
 var core_exports2 = {};
 __export(core_exports2, {
   $ZodAny: () => $ZodAny,
@@ -565,7 +565,7 @@ __export(core_exports2, {
   version: () => version
 });
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/core.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/core.js
 var _a;
 var NEVER = /* @__PURE__ */ Object.freeze({
   status: "aborted"
@@ -642,7 +642,7 @@ function config(newConfig) {
   return globalConfig;
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/util.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/util.js
 var util_exports = {};
 __export(util_exports, {
   BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES,
@@ -1338,7 +1338,7 @@ var Class = class {
   }
 };
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/errors.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/errors.js
 var initializer = (inst, def) => {
   inst.name = "$ZodError";
   Object.defineProperty(inst, "_zod", {
@@ -1477,7 +1477,7 @@ function prettifyError(error51) {
   return lines.join("\n");
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/parse.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/parse.js
 var _parse = (_Err) => (schema, value, _ctx, _params) => {
   const ctx = _ctx ? { ..._ctx, async: false } : { async: false };
   const result = schema._zod.run({ value, issues: [] }, ctx);
@@ -1565,7 +1565,7 @@ var _safeDecodeAsync = (_Err) => async (schema, value, _ctx) => {
 };
 var safeDecodeAsync = /* @__PURE__ */ _safeDecodeAsync($ZodRealError);
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/regexes.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/regexes.js
 var regexes_exports = {};
 __export(regexes_exports, {
   base64: () => base64,
@@ -1724,7 +1724,7 @@ var sha512_hex = /^[0-9a-fA-F]{128}$/;
 var sha512_base64 = /* @__PURE__ */ fixedBase64(86, "==");
 var sha512_base64url = /* @__PURE__ */ fixedBase64url(86);
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/checks.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/checks.js
 var $ZodCheck = /* @__PURE__ */ $constructor("$ZodCheck", (inst, def) => {
   var _a3;
   inst._zod ?? (inst._zod = {});
@@ -2272,7 +2272,7 @@ var $ZodCheckOverwrite = /* @__PURE__ */ $constructor("$ZodCheckOverwrite", (ins
   };
 });
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/doc.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/doc.js
 var Doc = class {
   constructor(args = []) {
     this.content = [];
@@ -2308,14 +2308,14 @@ var Doc = class {
   }
 };
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/versions.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/versions.js
 var version = {
   major: 4,
   minor: 4,
   patch: 3
 };
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/schemas.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/schemas.js
 var $ZodType = /* @__PURE__ */ $constructor("$ZodType", (inst, def) => {
   var _a3;
   inst ?? (inst = {});
@@ -4408,7 +4408,7 @@ function handleRefineResult(result, payload, input, inst) {
   }
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/index.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/index.js
 var locales_exports = {};
 __export(locales_exports, {
   ar: () => ar_default,
@@ -4465,7 +4465,7 @@ __export(locales_exports, {
   zhTW: () => zh_TW_default
 });
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ar.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ar.js
 var error = () => {
   const Sizable = {
     string: { unit: "\u062D\u0631\u0641", verb: "\u0623\u0646 \u064A\u062D\u0648\u064A" },
@@ -4572,7 +4572,7 @@ function ar_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/az.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/az.js
 var error2 = () => {
   const Sizable = {
     string: { unit: "simvol", verb: "olmal\u0131d\u0131r" },
@@ -4678,7 +4678,7 @@ function az_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/be.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/be.js
 function getBelarusianPlural(count, one, few, many) {
   const absCount = Math.abs(count);
   const lastDigit = absCount % 10;
@@ -4835,7 +4835,7 @@ function be_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/bg.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/bg.js
 var error4 = () => {
   const Sizable = {
     string: { unit: "\u0441\u0438\u043C\u0432\u043E\u043B\u0430", verb: "\u0434\u0430 \u0441\u044A\u0434\u044A\u0440\u0436\u0430" },
@@ -4956,7 +4956,7 @@ function bg_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ca.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ca.js
 var error5 = () => {
   const Sizable = {
     string: { unit: "car\xE0cters", verb: "contenir" },
@@ -5065,7 +5065,7 @@ function ca_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/cs.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/cs.js
 var error6 = () => {
   const Sizable = {
     string: { unit: "znak\u016F", verb: "m\xEDt" },
@@ -5177,7 +5177,7 @@ function cs_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/da.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/da.js
 var error7 = () => {
   const Sizable = {
     string: { unit: "tegn", verb: "havde" },
@@ -5293,7 +5293,7 @@ function da_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/de.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/de.js
 var error8 = () => {
   const Sizable = {
     string: { unit: "Zeichen", verb: "zu haben" },
@@ -5402,7 +5402,7 @@ function de_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/el.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/el.js
 var error9 = () => {
   const Sizable = {
     string: { unit: "\u03C7\u03B1\u03C1\u03B1\u03BA\u03C4\u03AE\u03C1\u03B5\u03C2", verb: "\u03BD\u03B1 \u03AD\u03C7\u03B5\u03B9" },
@@ -5512,7 +5512,7 @@ function el_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/en.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/en.js
 var error10 = () => {
   const Sizable = {
     string: { unit: "characters", verb: "to have" },
@@ -5625,7 +5625,7 @@ function en_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/eo.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/eo.js
 var error11 = () => {
   const Sizable = {
     string: { unit: "karaktrojn", verb: "havi" },
@@ -5735,7 +5735,7 @@ function eo_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/es.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/es.js
 var error12 = () => {
   const Sizable = {
     string: { unit: "caracteres", verb: "tener" },
@@ -5868,7 +5868,7 @@ function es_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fa.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fa.js
 var error13 = () => {
   const Sizable = {
     string: { unit: "\u06A9\u0627\u0631\u0627\u06A9\u062A\u0631", verb: "\u062F\u0627\u0634\u062A\u0647 \u0628\u0627\u0634\u062F" },
@@ -5983,7 +5983,7 @@ function fa_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fi.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fi.js
 var error14 = () => {
   const Sizable = {
     string: { unit: "merkki\xE4", subject: "merkkijonon" },
@@ -6096,7 +6096,7 @@ function fi_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fr.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fr.js
 var error15 = () => {
   const Sizable = {
     string: { unit: "caract\xE8res", verb: "avoir" },
@@ -6222,7 +6222,7 @@ function fr_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fr-CA.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fr-CA.js
 var error16 = () => {
   const Sizable = {
     string: { unit: "caract\xE8res", verb: "avoir" },
@@ -6330,7 +6330,7 @@ function fr_CA_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/he.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/he.js
 var error17 = () => {
   const TypeNames = {
     string: { label: "\u05DE\u05D7\u05E8\u05D5\u05D6\u05EA", gender: "f" },
@@ -6525,7 +6525,7 @@ function he_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/hr.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/hr.js
 var error18 = () => {
   const Sizable = {
     string: { unit: "znakova", verb: "imati" },
@@ -6648,7 +6648,7 @@ function hr_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/hu.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/hu.js
 var error19 = () => {
   const Sizable = {
     string: { unit: "karakter", verb: "legyen" },
@@ -6757,7 +6757,7 @@ function hu_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/hy.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/hy.js
 function getArmenianPlural(count, one, many) {
   return Math.abs(count) === 1 ? one : many;
 }
@@ -6905,7 +6905,7 @@ function hy_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/id.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/id.js
 var error21 = () => {
   const Sizable = {
     string: { unit: "karakter", verb: "memiliki" },
@@ -7012,7 +7012,7 @@ function id_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/is.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/is.js
 var error22 = () => {
   const Sizable = {
     string: { unit: "stafi", verb: "a\xF0 hafa" },
@@ -7122,7 +7122,7 @@ function is_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/it.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/it.js
 var error23 = () => {
   const Sizable = {
     string: { unit: "caratteri", verb: "avere" },
@@ -7231,7 +7231,7 @@ function it_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ja.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ja.js
 var error24 = () => {
   const Sizable = {
     string: { unit: "\u6587\u5B57", verb: "\u3067\u3042\u308B" },
@@ -7339,7 +7339,7 @@ function ja_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ka.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ka.js
 var error25 = () => {
   const Sizable = {
     string: { unit: "\u10E1\u10D8\u10DB\u10D1\u10DD\u10DA\u10DD", verb: "\u10E3\u10DC\u10D3\u10D0 \u10E8\u10D4\u10D8\u10EA\u10D0\u10D5\u10D3\u10D4\u10E1" },
@@ -7452,7 +7452,7 @@ function ka_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/km.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/km.js
 var error26 = () => {
   const Sizable = {
     string: { unit: "\u178F\u17BD\u17A2\u1780\u17D2\u179F\u179A", verb: "\u1782\u17BD\u179A\u1798\u17B6\u1793" },
@@ -7563,12 +7563,12 @@ function km_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/kh.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/kh.js
 function kh_default() {
   return km_default();
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ko.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ko.js
 var error27 = () => {
   const Sizable = {
     string: { unit: "\uBB38\uC790", verb: "to have" },
@@ -7680,7 +7680,7 @@ function ko_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/lt.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/lt.js
 var capitalizeFirstCharacter = (text2) => {
   return text2.charAt(0).toUpperCase() + text2.slice(1);
 };
@@ -7884,7 +7884,7 @@ function lt_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/mk.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/mk.js
 var error29 = () => {
   const Sizable = {
     string: { unit: "\u0437\u043D\u0430\u0446\u0438", verb: "\u0434\u0430 \u0438\u043C\u0430\u0430\u0442" },
@@ -7994,7 +7994,7 @@ function mk_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ms.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ms.js
 var error30 = () => {
   const Sizable = {
     string: { unit: "aksara", verb: "mempunyai" },
@@ -8102,7 +8102,7 @@ function ms_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/nl.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/nl.js
 var error31 = () => {
   const Sizable = {
     string: { unit: "tekens", verb: "heeft" },
@@ -8213,7 +8213,7 @@ function nl_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/no.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/no.js
 var error32 = () => {
   const Sizable = {
     string: { unit: "tegn", verb: "\xE5 ha" },
@@ -8322,7 +8322,7 @@ function no_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ota.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ota.js
 var error33 = () => {
   const Sizable = {
     string: { unit: "harf", verb: "olmal\u0131d\u0131r" },
@@ -8432,7 +8432,7 @@ function ota_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ps.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ps.js
 var error34 = () => {
   const Sizable = {
     string: { unit: "\u062A\u0648\u06A9\u064A", verb: "\u0648\u0644\u0631\u064A" },
@@ -8547,7 +8547,7 @@ function ps_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/pl.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/pl.js
 var error35 = () => {
   const Sizable = {
     string: { unit: "znak\xF3w", verb: "mie\u0107" },
@@ -8657,7 +8657,7 @@ function pl_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/pt.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/pt.js
 var error36 = () => {
   const Sizable = {
     string: { unit: "caracteres", verb: "ter" },
@@ -8766,7 +8766,7 @@ function pt_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ro.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ro.js
 var error37 = () => {
   const Sizable = {
     string: { unit: "caractere", verb: "s\u0103 aib\u0103" },
@@ -8886,7 +8886,7 @@ function ro_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ru.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ru.js
 function getRussianPlural(count, one, few, many) {
   const absCount = Math.abs(count);
   const lastDigit = absCount % 10;
@@ -9043,7 +9043,7 @@ function ru_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/sl.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/sl.js
 var error39 = () => {
   const Sizable = {
     string: { unit: "znakov", verb: "imeti" },
@@ -9153,7 +9153,7 @@ function sl_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/sv.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/sv.js
 var error40 = () => {
   const Sizable = {
     string: { unit: "tecken", verb: "att ha" },
@@ -9264,7 +9264,7 @@ function sv_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ta.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ta.js
 var error41 = () => {
   const Sizable = {
     string: { unit: "\u0B8E\u0BB4\u0BC1\u0BA4\u0BCD\u0BA4\u0BC1\u0B95\u0BCD\u0B95\u0BB3\u0BCD", verb: "\u0B95\u0BCA\u0BA3\u0BCD\u0B9F\u0BBF\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD" },
@@ -9375,7 +9375,7 @@ function ta_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/th.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/th.js
 var error42 = () => {
   const Sizable = {
     string: { unit: "\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23", verb: "\u0E04\u0E27\u0E23\u0E21\u0E35" },
@@ -9486,7 +9486,7 @@ function th_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/tr.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/tr.js
 var error43 = () => {
   const Sizable = {
     string: { unit: "karakter", verb: "olmal\u0131" },
@@ -9592,7 +9592,7 @@ function tr_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/uk.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/uk.js
 var error44 = () => {
   const Sizable = {
     string: { unit: "\u0441\u0438\u043C\u0432\u043E\u043B\u0456\u0432", verb: "\u043C\u0430\u0442\u0438\u043C\u0435" },
@@ -9701,12 +9701,12 @@ function uk_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ua.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ua.js
 function ua_default() {
   return uk_default();
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ur.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ur.js
 var error45 = () => {
   const Sizable = {
     string: { unit: "\u062D\u0631\u0648\u0641", verb: "\u06C1\u0648\u0646\u0627" },
@@ -9817,7 +9817,7 @@ function ur_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/uz.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/uz.js
 var error46 = () => {
   const Sizable = {
     string: { unit: "belgi", verb: "bo\u2018lishi kerak" },
@@ -9928,7 +9928,7 @@ function uz_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/vi.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/vi.js
 var error47 = () => {
   const Sizable = {
     string: { unit: "k\xFD t\u1EF1", verb: "c\xF3" },
@@ -10037,7 +10037,7 @@ function vi_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/zh-CN.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/zh-CN.js
 var error48 = () => {
   const Sizable = {
     string: { unit: "\u5B57\u7B26", verb: "\u5305\u542B" },
@@ -10147,7 +10147,7 @@ function zh_CN_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/zh-TW.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/zh-TW.js
 var error49 = () => {
   const Sizable = {
     string: { unit: "\u5B57\u5143", verb: "\u64C1\u6709" },
@@ -10255,7 +10255,7 @@ function zh_TW_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/yo.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/yo.js
 var error50 = () => {
   const Sizable = {
     string: { unit: "\xE0mi", verb: "n\xED" },
@@ -10363,7 +10363,7 @@ function yo_default() {
   };
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/registries.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/registries.js
 var _a2;
 var $output = Symbol("ZodOutput");
 var $input = Symbol("ZodInput");
@@ -10413,7 +10413,7 @@ function registry() {
 (_a2 = globalThis).__zod_globalRegistry ?? (_a2.__zod_globalRegistry = registry());
 var globalRegistry = globalThis.__zod_globalRegistry;
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/api.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/api.js
 // @__NO_SIDE_EFFECTS__
 function _string(Class2, params) {
   return new Class2({
@@ -11452,7 +11452,7 @@ function _stringFormat(Class2, format, fnOrRegex, _params = {}) {
   return inst;
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/to-json-schema.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/to-json-schema.js
 function initializeContext(params) {
   let target = params?.target ?? "draft-2020-12";
   if (target === "draft-4")
@@ -11811,7 +11811,7 @@ var createStandardJSONSchemaMethod = (schema, io, processors = {}) => (params) =
   return finalize(ctx, schema);
 };
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/json-schema-processors.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/json-schema-processors.js
 var formatMap = {
   guid: "uuid",
   url: "uri",
@@ -12355,7 +12355,7 @@ function toJSONSchema(input, params) {
   return finalize(ctx, input);
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/json-schema-generator.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/json-schema-generator.js
 var JSONSchemaGenerator = class {
   /** @deprecated Access via ctx instead */
   get metadataRegistry() {
@@ -12430,10 +12430,10 @@ var JSONSchemaGenerator = class {
   }
 };
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/json-schema.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/json-schema.js
 var json_schema_exports = {};
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/schemas.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/schemas.js
 var schemas_exports2 = {};
 __export(schemas_exports2, {
   ZodAny: () => ZodAny,
@@ -12604,7 +12604,7 @@ __export(schemas_exports2, {
   xor: () => xor
 });
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/checks.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/checks.js
 var checks_exports2 = {};
 __export(checks_exports2, {
   endsWith: () => _endsWith,
@@ -12638,7 +12638,7 @@ __export(checks_exports2, {
   uppercase: () => _uppercase
 });
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/iso.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/iso.js
 var iso_exports = {};
 __export(iso_exports, {
   ZodISODate: () => ZodISODate,
@@ -12679,7 +12679,7 @@ function duration2(params) {
   return _isoDuration(ZodISODuration, params);
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/errors.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/errors.js
 var initializer2 = (inst, issues) => {
   $ZodError.init(inst, issues);
   inst.name = "ZodError";
@@ -12719,7 +12719,7 @@ var ZodRealError = /* @__PURE__ */ $constructor("ZodError", initializer2, {
   Parent: Error
 });
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/parse.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/parse.js
 var parse2 = /* @__PURE__ */ _parse(ZodRealError);
 var parseAsync2 = /* @__PURE__ */ _parseAsync(ZodRealError);
 var safeParse2 = /* @__PURE__ */ _safeParse(ZodRealError);
@@ -12733,7 +12733,7 @@ var safeDecode2 = /* @__PURE__ */ _safeDecode(ZodRealError);
 var safeEncodeAsync2 = /* @__PURE__ */ _safeEncodeAsync(ZodRealError);
 var safeDecodeAsync2 = /* @__PURE__ */ _safeDecodeAsync(ZodRealError);
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/schemas.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/schemas.js
 var _installedGroups = /* @__PURE__ */ new WeakMap();
 function _installLazyMethods(inst, group, methods) {
   const proto = Object.getPrototypeOf(inst);
@@ -14023,7 +14023,7 @@ function preprocess(fn, schema) {
   });
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/compat.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/compat.js
 var ZodIssueCode = {
   invalid_type: "invalid_type",
   too_big: "too_big",
@@ -14049,7 +14049,7 @@ var ZodFirstPartyTypeKind;
 /* @__PURE__ */ (function(ZodFirstPartyTypeKind2) {
 })(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/from-json-schema.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/from-json-schema.js
 var z = {
   ...schemas_exports2,
   ...checks_exports2,
@@ -14529,7 +14529,7 @@ function fromJSONSchema(schema, params) {
   return convertSchema(normalized, ctx);
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/coerce.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/coerce.js
 var coerce_exports = {};
 __export(coerce_exports, {
   bigint: () => bigint3,
@@ -14554,7 +14554,7 @@ function date4(params) {
   return _coercedDate(ZodDate, params);
 }
 
-// packages/dsh-plugin/node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
+// node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
 config(en_default());
 
 // packages/dsh-plugin/src/dockyard-typert-shared.mjs
@@ -14613,6 +14613,10 @@ var nativeKeyPolicyRequest = external_exports.object({
   providerId: external_exports.string().min(1),
   policy: external_exports.enum(["manual", "round_robin", "failover"])
 });
+var usageResetRequest = external_exports.object({
+  providerId: external_exports.string().min(1),
+  ref: external_exports.string().min(1).optional()
+});
 function requestParameter(schema, name) {
   return {
     name: "request",
@@ -14648,7 +14652,8 @@ var TYPERT_DESCRIPTORS = Object.freeze([
   descriptor("nativeKeyRefresh", requestParameter(nativeKeyProviderRequest, "DockyardNativeKeyProviderRequest"), "DockyardNativeKeyRefresh"),
   descriptor("nativeKeyRegister", requestParameter(nativeKeyRegisterRequest, "DockyardNativeKeyRegisterRequest"), "DockyardNativeKeyRegister"),
   descriptor("nativeKeyUnregister", requestParameter(nativeKeyRefRequest, "DockyardNativeKeyRefRequest"), "DockyardNativeKeyUnregister"),
-  descriptor("nativeKeySetPolicy", requestParameter(nativeKeyPolicyRequest, "DockyardNativeKeyPolicyRequest"), "DockyardNativeKeySetPolicy")
+  descriptor("nativeKeySetPolicy", requestParameter(nativeKeyPolicyRequest, "DockyardNativeKeyPolicyRequest"), "DockyardNativeKeySetPolicy"),
+  descriptor("usageReset", requestParameter(usageResetRequest, "DockyardUsageResetRequest"), "DockyardUsageReset")
 ]);
 var TYPERT_MODEL = Object.freeze({
   services: [
@@ -14837,6 +14842,28 @@ var DOCKYARD_LOCALES = Object.freeze({
     "native.operation.removeApiKey": "\u79FB\u9664 API Key",
     "native.operation.removeDockyardKey": "\u79FB\u9664 Dockyard Key",
     "native.operation.updatePolicy": "\u66F4\u65B0 Key \u7B56\u7565",
+    "native.operation.resetUsage": "\u91CD\u7F6E Token \u7528\u91CF\u8BB0\u5F55",
+    "usage.requests": "\u8BF7\u6C42",
+    "usage.input": "\u8F93\u5165",
+    "usage.output": "\u8F93\u51FA",
+    "usage.cacheRead": "\u7F13\u5B58\u8BFB",
+    "usage.cacheWrite": "\u7F13\u5B58\u5199",
+    "usage.reasoning": "\u63A8\u7406",
+    "usage.total": "\u603B\u8BA1",
+    "usage.today": "\u4ECA\u65E5",
+    "usage.lastModel": "\u6A21\u578B\uFF1A{model}",
+    "usage.lastUsed": "\u6700\u8FD1\u4F7F\u7528\uFF1A{at}",
+    "usage.never": "\u672C\u5730\u5C1A\u65E0\u8C03\u7528\u8BB0\u5F55\uFF1B\u7EDF\u8BA1\u4ECE\u672C\u7248\u672C\u542F\u7528\u540E\u5F00\u59CB\u7D2F\u79EF\u3002",
+    "usage.failed": "\u5931\u8D25",
+    "native.resetUsage": "\u6E05\u7A7A\u7528\u91CF",
+    "native.resetUsageAll": "\u6E05\u7A7A\u5168\u90E8\u7528\u91CF",
+    "native.resetUsageAllTitle": "\u6E05\u7A7A\u8BE5 provider \u5168\u90E8\u51ED\u636E\u7684\u672C\u5730 Token \u4F7F\u7528\u8BB0\u5F55",
+    "native.resetUsageAllConfirm": "\u786E\u8BA4\u6E05\u7A7A\u8BE5 provider \u6240\u6709\u51ED\u636E\u7684 Token \u4F7F\u7528\u8BB0\u5F55\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u64A4\u9500\u3002",
+    "native.addKeyShow": "+ \u6DFB\u52A0 Key",
+    "native.addKeyHide": "\u6536\u8D77\u6DFB\u52A0 Key",
+    "native.keyCountSummary": "\u53EF\u7528 {configured}/{total}",
+    "native.message.usageClearedKey": "\u5DF2\u6E05\u7A7A\u8BE5\u51ED\u636E\u7684 Token \u4F7F\u7528\u8BB0\u5F55\u3002",
+    "native.message.usageClearedProvider": "\u5DF2\u6E05\u7A7A\u8BE5 provider \u7684\u5168\u90E8 Token \u4F7F\u7528\u8BB0\u5F55\u3002",
     "native.error.noWritableConfig": "DSH \u6CA1\u6709\u8FD4\u56DE\u8BE5 provider \u7684\u53EF\u5199\u914D\u7F6E",
     "native.error.enterApiKey": "\u8BF7\u8F93\u5165 API Key",
     "native.error.notNativeProvider": "\u5F53\u524D\u6A21\u578B\u4E0D\u662F DSH \u539F\u751F API Key provider",
@@ -15017,6 +15044,28 @@ var DOCKYARD_LOCALES = Object.freeze({
     "native.operation.removeApiKey": "Remove API Key",
     "native.operation.removeDockyardKey": "Remove Dockyard Key",
     "native.operation.updatePolicy": "Update Key policy",
+    "native.operation.resetUsage": "Reset token usage records",
+    "usage.requests": "Requests",
+    "usage.input": "Input",
+    "usage.output": "Output",
+    "usage.cacheRead": "Cache read",
+    "usage.cacheWrite": "Cache write",
+    "usage.reasoning": "Reasoning",
+    "usage.total": "Total",
+    "usage.today": "Today",
+    "usage.lastModel": "Model: {model}",
+    "usage.lastUsed": "Last used: {at}",
+    "usage.never": "No local calls recorded yet; tracking starts with this version.",
+    "usage.failed": "failed",
+    "native.resetUsage": "Clear usage",
+    "native.resetUsageAll": "Clear all usage",
+    "native.resetUsageAllTitle": "Clear local token usage records for every credential of this provider",
+    "native.resetUsageAllConfirm": "Clear token usage records for all credentials of this provider? This cannot be undone.",
+    "native.addKeyShow": "+ Add Key",
+    "native.addKeyHide": "Hide add Key",
+    "native.keyCountSummary": "{configured}/{total} ready",
+    "native.message.usageClearedKey": "Token usage for this credential has been cleared.",
+    "native.message.usageClearedProvider": "Token usage for this provider has been cleared.",
     "native.error.noWritableConfig": "DSH did not return writable configuration for this provider",
     "native.error.enterApiKey": "Enter an API Key",
     "native.error.notNativeProvider": "The current model is not a native DSH API Key provider",
@@ -15169,7 +15218,9 @@ var NativeKeyPoolController = class {
       native: false,
       runtimeMode: "request-key-pool",
       quota: null,
-      usage: null
+      usage: null,
+      tokenTotals: null,
+      tokenUpdatedAt: null
     }));
     __publicField(this, "generation", 0);
     this.api = api;
@@ -15194,7 +15245,9 @@ var NativeKeyPoolController = class {
       ...typeof host.policy === "string" ? { policy: host.policy } : {},
       ...typeof host.runtimeMode === "string" ? { runtimeMode: host.runtimeMode } : {},
       ...Object.hasOwn(host, "quota") ? { quota: host.quota } : {},
-      ...Object.hasOwn(host, "usage") ? { usage: host.usage } : {}
+      ...Object.hasOwn(host, "usage") ? { usage: host.usage } : {},
+      ...Object.hasOwn(host, "tokenTotals") ? { tokenTotals: host.tokenTotals } : {},
+      ...Object.hasOwn(host, "tokenUpdatedAt") ? { tokenUpdatedAt: host.tokenUpdatedAt } : {}
     });
   }
   async load(providerId) {
@@ -15215,6 +15268,8 @@ var NativeKeyPoolController = class {
       runtimeMode: "request-key-pool",
       quota: null,
       usage: null,
+      tokenTotals: null,
+      tokenUpdatedAt: null,
       error: null,
       message: null
     });
@@ -15412,6 +15467,29 @@ var NativeKeyPoolController = class {
       return null;
     }
   }
+  /** Clear local token usage records for one key or the whole provider. */
+  async resetUsage(providerId, ref = null) {
+    this.setState({ action: "resetUsage", status: "loading", providerId, error: null, message: null });
+    try {
+      await this.ensure(providerId);
+      const refreshed = await this.remoteCall(
+        "usageReset",
+        ref ? { providerId, ref } : { providerId },
+        this.operation("native.operation.resetUsage", "Reset token usage records")
+      );
+      if (refreshed) this.applyHostStatus(refreshed);
+      await this.load(providerId);
+      this.setState({
+        message: ref ? this.t?.("native.message.usageClearedKey") ?? "Token usage for this Key has been cleared." : this.t?.("native.message.usageClearedProvider") ?? "Token usage for this provider has been cleared.",
+        action: null,
+        status: "ready"
+      });
+      return this.store.getSnapshot();
+    } catch (error51) {
+      this.setState({ action: null, status: "ready", error: errorMessage(error51, this.t) });
+      return null;
+    }
+  }
   async setPolicy(providerId, policy) {
     if (!Object.hasOwn(NATIVE_KEY_POLICY_LABELS, policy)) return;
     try {
@@ -15529,11 +15607,11 @@ section[data-dockyard-model-group-collapsed="true"]>[role="menuitemradio"]{displ
 .dockyard-dsh-tier:disabled{cursor:default;opacity:.55}
 .dockyard-dsh-account{display:flex;flex-direction:column;gap:7px;padding:9px;border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.1));border-radius:10px;background:rgba(255,255,255,.035)}
 .dockyard-dsh-account[data-current=true]{border-color:rgba(121,214,200,.45);background:rgba(121,214,200,.065)}
-.dockyard-dsh-account-head{display:flex;align-items:center;gap:8px}
+.dockyard-dsh-account-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .dockyard-dsh-account-identity{min-width:0;flex:1}
 .dockyard-dsh-account-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-primary,#f5f7fb);font-size:12px;font-weight:600}
 .dockyard-dsh-account-id{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-caption,#8b93a1);font-size:10px}
-.dockyard-dsh-account-actions{display:flex;align-items:center;gap:5px;flex:none}
+.dockyard-dsh-account-actions{display:flex;align-items:center;gap:5px;flex:none;margin-left:auto}
 .dockyard-dsh-account-use{height:25px;padding:0 7px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16));border-radius:6px;background:transparent;color:#a5e6dd;cursor:pointer;font:500 10px/18px Inter,var(--dsw-font-family,sans-serif);white-space:nowrap}
 .dockyard-dsh-account-use:hover:not(:disabled){background:rgba(121,214,200,.12)}
 .dockyard-dsh-account-use:disabled{cursor:default;opacity:.5}
@@ -15566,7 +15644,54 @@ section[data-dockyard-model-group-collapsed="true"]>[role="menuitemradio"]{displ
 .dockyard-dsh-key-save:disabled{cursor:default;opacity:.45}
 .dockyard-dsh-key-ref{overflow:hidden;color:var(--dsw-alias-label-caption,#8b93a1);font:400 9px/14px ui-monospace,SFMono-Regular,Menlo,monospace;text-overflow:ellipsis;white-space:nowrap}
 .dockyard-dsh-key-source{color:var(--dsw-alias-label-caption,#8b93a1);font-size:10px}
+/* --- wide popup mode --------------------------------------------------- */
+.dockyard-dsh-popup[data-size="wide"]{width:min(720px,calc(100vw - 28px));max-height:var(--dockyard-dsh-popup-max-height,min(720px,calc(100dvh - 28px)))}
+/* --- key table ---------------------------------------------------------- */
+.dockyard-dsh-keytable{display:flex;flex-direction:column;gap:4px}
+.dockyard-dsh-keyrow{overflow:hidden;border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.1));border-radius:9px;background:rgba(255,255,255,.035)}
+.dockyard-dsh-keyrow[data-current=true]{border-color:rgba(121,214,200,.45);background:rgba(121,214,200,.06)}
+.dockyard-dsh-keyrow[data-open=true]{border-color:rgba(121,214,200,.35)}
+.dockyard-dsh-keyrow-head{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(120px,auto) 14px;align-items:center;gap:10px;width:100%;box-sizing:border-box;padding:7px 9px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.dockyard-dsh-keyrow-head:focus-visible{outline:2px solid var(--dsw-alias-border-l3,#8fa3c7);outline-offset:-2px}
+.dockyard-dsh-keyrow-identity{min-width:0;display:flex;flex-direction:column;gap:1px}
+.dockyard-dsh-keyrow-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary,#f5f7fb)}
+.dockyard-dsh-keyrow-ref{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-caption,#8b93a1);font:400 9px/14px ui-monospace,SFMono-Regular,Menlo,monospace}
+.dockyard-dsh-keyrow-state{flex:none;font-size:10px;line-height:16px;color:#9ce5dc}
+.dockyard-dsh-keyrow-state[data-bad=true]{color:#ff9a83}
+.dockyard-dsh-keyrow-tokens{display:flex;align-items:baseline;gap:10px;justify-content:flex-end;font-size:10px;line-height:16px;color:var(--dsw-alias-label-secondary,#c7ccd5);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dockyard-dsh-keyrow-tokens .up{color:#9ce5dc}
+.dockyard-dsh-keyrow-tokens .down{color:#cbb7ff}
+.dockyard-dsh-keyrow-chevron{color:var(--dsw-alias-label-caption,#8b93a1);transition:transform 140ms ease}
+.dockyard-dsh-keyrow-chevron[data-open=true]{transform:rotate(180deg)}
+.dockyard-dsh-keyrow-detail{display:flex;flex-direction:column;gap:8px;padding:9px;border-top:1px solid rgba(255,255,255,.07)}
+.dockyard-dsh-keyrow-detail-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dockyard-dsh-keyrow-detail-actions .spacer{flex:1}
+/* --- token usage stats --------------------------------------------------- */
+.dockyard-dsh-tokenstats{display:flex;flex-wrap:wrap;gap:3px 16px;padding:7px 9px;border-radius:8px;background:rgba(255,255,255,.04);font-size:11px;line-height:17px}
+.dockyard-dsh-tokenstat{display:inline-flex;align-items:baseline;gap:5px;color:var(--dsw-alias-label-caption,#8b93a1);white-space:nowrap}
+.dockyard-dsh-tokenstat b{color:var(--dsw-alias-label-primary,#f5f7fb);font-weight:600;font-variant-numeric:tabular-nums}
+.dockyard-dsh-tokenmeta{display:flex;flex-wrap:wrap;gap:3px 12px;color:var(--dsw-alias-label-caption,#8b93a1);font-size:10px;line-height:15px}
+.dockyard-dsh-recentlist{display:flex;flex-direction:column;gap:2px;margin:2px 0 0;padding:0;list-style:none}
+.dockyard-dsh-recentlist li{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:10px;line-height:16px;color:var(--dsw-alias-label-caption,#8b93a1)}
+.dockyard-dsh-recentlist li[data-status="failure"]{color:#ff9a83}
+.dockyard-dsh-recentlist .recent-model{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary,#c7ccd5)}
+.dockyard-dsh-recentlist .recent-tokens{margin-left:auto;flex:none;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* --- collapsible folds ---------------------------------------------------- */
+.dockyard-dsh-fold{border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.1));border-radius:9px;background:rgba(255,255,255,.03)}
+.dockyard-dsh-fold>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:inherit;cursor:pointer;list-style:none;color:var(--dsw-alias-label-tertiary,#a9b0ba);font-size:10px;font-weight:700;letter-spacing:1.2px;line-height:18px;text-transform:uppercase}
+.dockyard-dsh-fold>summary::-webkit-details-marker{display:none}
+.dockyard-dsh-fold>summary::after{content:"\u203A";flex:none;color:var(--dsw-alias-label-caption,#8b93a1);font-size:13px;transform:rotate(90deg);transition:transform 140ms ease}
+.dockyard-dsh-fold[open]>summary::after{transform:rotate(-90deg)}
+.dockyard-dsh-fold>summary:hover{color:#b8eee8}
+.dockyard-dsh-fold-body{display:flex;flex-direction:column;gap:6px;padding:0 9px 9px}
 @keyframes dockyard-dsh-pulse{0%,100%{opacity:.45}50%{opacity:1}}
+/* --- narrow viewport fallback --------------------------------------------- */
+@media (max-width:560px){
+  .dockyard-dsh-popup{left:8px!important;top:auto!important;bottom:8px!important;width:calc(100vw - 16px)!important;max-height:calc(100dvh - 16px)!important}
+  .dockyard-dsh-keyrow-head{grid-template-columns:minmax(0,1fr) auto 14px}
+  .dockyard-dsh-keyrow-tokens{display:none}
+  .dockyard-dsh-account-actions{margin-left:0}
+}
 `;
 function installStyles() {
   if (typeof document === "undefined" || document.querySelector(`style[data-dockyard-dsh="${STYLE_ID}"]`)) return;
@@ -15717,6 +15842,88 @@ function formatDate(value, t) {
 function formatNumber(value, t) {
   if (value === null || value === void 0) return text(t, "value.unknown");
   return typeof value === "number" ? new Intl.NumberFormat().format(value) : String(value);
+}
+function formatTokenCount(value) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "0";
+  if (value < 1e3) return String(value);
+  if (value < 1e6) return `${(value / 1e3).toFixed(value < 1e4 ? 1 : 0)}k`;
+  return `${(value / 1e6).toFixed(1)}M`;
+}
+function shortRef(ref) {
+  const value = String(ref ?? "");
+  if (value.length <= 28) return value;
+  return `${value.slice(0, 16)}\u2026${value.slice(-8)}`;
+}
+function usageEntryOf(subject) {
+  const entry = subject?.tokenUsage ?? null;
+  return entry && typeof entry === "object" && typeof entry.requests === "number" ? entry : null;
+}
+function tokenUsageView(entry, t, { onReset = null, busy = false } = {}) {
+  if (!entry || entry.requests <= 0) {
+    return h("div", { className: "dockyard-dsh-muted" }, text(t, "usage.never"));
+  }
+  const stats = [
+    ["usage.requests", formatNumber(entry.requests, t)],
+    ["usage.input", formatTokenCount(entry.inputTokens)],
+    ["usage.output", formatTokenCount(entry.outputTokens)]
+  ];
+  if (entry.cacheReadTokens > 0) stats.push(["usage.cacheRead", formatTokenCount(entry.cacheReadTokens)]);
+  if (entry.cacheWriteTokens > 0) stats.push(["usage.cacheWrite", formatTokenCount(entry.cacheWriteTokens)]);
+  if (entry.reasoningTokens > 0) stats.push(["usage.reasoning", formatTokenCount(entry.reasoningTokens)]);
+  stats.push(["usage.total", formatTokenCount(entry.totalTokens)]);
+  const todayKey = (() => {
+    try {
+      const shifted = new Date(Date.now() - 8 * 60 * 60 * 1e3);
+      return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}-${String(shifted.getDate()).padStart(2, "0")}`;
+    } catch {
+      return null;
+    }
+  })();
+  const today = todayKey && entry.days?.[todayKey];
+  const recent = Array.isArray(entry.recent) ? entry.recent.slice(-4).reverse() : [];
+  return h(
+    "div",
+    { className: "dockyard-dsh-usage-block" },
+    h("div", { className: "dockyard-dsh-tokenstats" }, stats.map(([label, value]) => h(
+      "span",
+      { className: "dockyard-dsh-tokenstat", key: label },
+      text(t, label),
+      h("b", null, value)
+    ))),
+    today ? h(
+      "div",
+      { className: "dockyard-dsh-tokenmeta" },
+      `${text(t, "usage.today")} \u25B2${formatTokenCount(today.inputTokens)} \u25BC${formatTokenCount(today.outputTokens)}`
+    ) : null,
+    h(
+      "div",
+      { className: "dockyard-dsh-tokenmeta" },
+      entry.lastModel ? h("span", null, text(t, "usage.lastModel", { model: entry.lastModel })) : null,
+      entry.lastUsedAt ? h("span", null, text(t, "usage.lastUsed", { at: formatDate(entry.lastUsedAt, t) })) : null
+    ),
+    recent.length > 0 ? h("ul", { className: "dockyard-dsh-recentlist" }, recent.map((row, index) => h(
+      "li",
+      {
+        key: `${row.at ?? index}-${index}`,
+        "data-status": row.status,
+        title: row.model ?? ""
+      },
+      h("span", null, formatDate(row.at, t)),
+      h("span", { className: "recent-model" }, row.model ?? text(t, "value.unknown")),
+      row.status === "failure" ? h("span", null, text(t, "usage.failed")) : null,
+      h("span", { className: "recent-tokens" }, `\u25B2${formatTokenCount(row.inputTokens)} \u25BC${formatTokenCount(row.outputTokens)}`)
+    ))) : null,
+    typeof onReset === "function" ? h(
+      "div",
+      { className: "dockyard-dsh-keyrow-detail-actions" },
+      h("button", {
+        type: "button",
+        className: "dockyard-dsh-action dockyard-dsh-action-danger",
+        disabled: busy,
+        onClick: onReset
+      }, text(t, "native.resetUsage"))
+    ) : null
+  );
 }
 function quotaWindowRows(quota, t) {
   if (!quota || typeof quota !== "object") return [];
@@ -15933,6 +16140,24 @@ var DockyardClientController = class {
       return { result: this.applyValue(value, providerId, { preserveControl: true }), error: null };
     } catch (error51) {
       return { result: null, error: errorText(error51, this.t) };
+    }
+  }
+  /** Clear recorded token usage for one account or the whole provider. */
+  async resetUsage(providerId, accountId = null) {
+    this.setState({ action: "resetUsage", status: "loading", providerId, error: null, message: null });
+    try {
+      await this.call("usageReset", accountId ? { providerId, ref: accountId } : { providerId });
+      const value = await this.call("snapshot");
+      this.applyValue(value);
+      this.setState({
+        action: null,
+        status: "ready",
+        message: accountId ? text(this.t, "native.message.usageClearedKey") : text(this.t, "native.message.usageClearedProvider")
+      });
+      return true;
+    } catch (error51) {
+      this.setState({ action: null, status: "error", providerId, error: errorText(error51, this.t) });
+      return false;
     }
   }
   async add(providerId, candidateId) {
@@ -16191,7 +16416,11 @@ function AccountCard({ account, current, providerId, controller, busy, t }) {
     ),
     account.resources?.identityNote ? h("div", { className: "dockyard-dsh-account-note" }, account.resources.identityNote) : null,
     account.health?.lastError ? h("div", { className: "dockyard-dsh-account-error", title: account.health.lastError }, account.health.lastError) : null,
-    quotaView(account, t)
+    quotaView(account, t),
+    tokenUsageView(usageEntryOf(account), t, {
+      busy,
+      onReset: () => controller.resetUsage(providerId, account.accountId)
+    })
   );
 }
 function candidateMatchesAccount(candidate, account) {
@@ -16296,26 +16525,66 @@ function nativeQuotaView(native, t) {
   if (quota) return quotaView({ quota }, t);
   return h("div", { className: "dockyard-dsh-muted" }, text(t, "quota.currentNoWindow"));
 }
-function NativeKeyCard({ entry, providerId, controller, busy, t }) {
+function usageTotalsOf(subject) {
+  const entry = subject?.tokenTotals ?? null;
+  return entry && typeof entry === "object" && typeof entry.requests === "number" ? entry : null;
+}
+function Fold({ title, value = null, open = false, children }) {
+  return h(
+    "details",
+    { className: "dockyard-dsh-fold", open },
+    h(
+      "summary",
+      null,
+      h("span", null, title),
+      value ? h("span", { className: "dockyard-dsh-section-value" }, value) : null
+    ),
+    h("div", { className: "dockyard-dsh-fold-body" }, children)
+  );
+}
+function NativeKeyCard({ entry, providerId, controller, busy, t, open = false, onToggle = null }) {
   const configured = entry?.configured === true;
   const current = entry?.active === true;
   const writable = entry?.credential?.writable !== false;
   const label = entry?.label ?? entry?.ref ?? text(t, "title.key");
+  const usage = usageEntryOf(entry);
+  const toggle = () => typeof onToggle === "function" ? onToggle(entry.ref) : null;
   return h(
     "div",
-    { className: "dockyard-dsh-account", "data-current": current },
+    { className: "dockyard-dsh-keyrow", "data-current": current, "data-open": open },
     h(
-      "div",
-      { className: "dockyard-dsh-account-head" },
+      "button",
+      {
+        type: "button",
+        className: "dockyard-dsh-keyrow-head",
+        "aria-expanded": Boolean(open),
+        title: entry?.ref ?? "",
+        onClick: toggle
+      },
       h(
-        "div",
-        { className: "dockyard-dsh-account-identity" },
-        h("div", { className: "dockyard-dsh-account-name" }, label),
-        h("div", { className: "dockyard-dsh-key-ref", title: entry?.ref }, entry?.ref)
+        "span",
+        { className: "dockyard-dsh-keyrow-identity" },
+        h("span", { className: "dockyard-dsh-keyrow-name" }, label),
+        h("span", { className: "dockyard-dsh-keyrow-ref" }, shortRef(entry?.ref))
       ),
       h(
+        "span",
+        { className: "dockyard-dsh-keyrow-state", "data-bad": !configured },
+        configured ? text(t, "native.configured") : text(t, "native.unconfigured")
+      ),
+      h("span", { className: "dockyard-dsh-keyrow-tokens" }, usage && usage.requests > 0 ? [
+        h("span", { key: "req" }, `${formatNumber(usage.requests, t)}\xD7`),
+        h("span", { key: "in", className: "up" }, `\u25B2${formatTokenCount(usage.inputTokens)}`),
+        h("span", { key: "out", className: "down" }, `\u25BC${formatTokenCount(usage.outputTokens)}`)
+      ] : h("span", null, text(t, "usage.never"))),
+      h("span", { className: "dockyard-dsh-keyrow-chevron", "data-open": Boolean(open), "aria-hidden": "true" }, "\u25BE")
+    ),
+    open ? h(
+      "div",
+      { className: "dockyard-dsh-keyrow-detail" },
+      h(
         "div",
-        { className: "dockyard-dsh-account-actions" },
+        { className: "dockyard-dsh-keyrow-detail-actions" },
         h("button", {
           type: "button",
           className: "dockyard-dsh-account-use",
@@ -16332,23 +16601,22 @@ function NativeKeyCard({ entry, providerId, controller, busy, t }) {
             if (typeof window !== "undefined" && !window.confirm(text(t, "native.removeConfirm", { action, label }))) return;
             controller.removeKey(providerId, entry.ref);
           }
-        }, writable ? text(t, "native.remove") : text(t, "native.unlinkReference"))
-      )
-    ),
-    h(
-      "div",
-      { className: "dockyard-dsh-account-meta" },
-      h("span", { className: "dockyard-dsh-health", "data-bad": !configured }, configured ? text(t, "native.configured") : text(t, "native.unconfigured")),
-      entry?.credential?.source ? h("span", { className: "dockyard-dsh-key-source" }, text(t, "native.source", { source: entry.credential.source })) : null,
-      entry?.implicit ? h("span", { className: "dockyard-dsh-key-source" }, text(t, "native.fromProviderConfig")) : null
-    ),
-    entry?.usage ? nativeQuotaView(entry, t) : null
+        }, writable ? text(t, "native.remove") : text(t, "native.unlinkReference")),
+        h("span", { className: "spacer" }),
+        entry?.credential?.source ? h("span", { className: "dockyard-dsh-key-source" }, text(t, "native.source", { source: entry.credential.source })) : null,
+        entry?.implicit ? h("span", { className: "dockyard-dsh-key-source" }, text(t, "native.fromProviderConfig")) : null
+      ),
+      tokenUsageView(usage, t, { busy, onReset: () => controller.resetUsage(providerId, entry.ref) }),
+      entry?.usage ? nativeQuotaView(entry, t) : null
+    ) : null
   );
 }
-function NativeKeyPopup({ providerId, native, directory, directoryState, nativeController, onClose, t }) {
+function NativeKeyPopup({ providerId, native, directory, directoryState, nativeController, onClose, t, size = "normal" }) {
   const [tierBusy, setTierBusy] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [labelDraft, setLabelDraft] = useState("");
+  const [showKeyForm, setShowKeyForm] = useState(false);
+  const [expandedRef, setExpandedRef] = useState(null);
   const { current, group, model, efforts } = modelDetails(directoryState, providerId);
   const modelLabel = model?.name ?? current?.model ?? text(t, "title.noModel");
   const compactModelId = displayModelId(providerId, current?.model);
@@ -16356,6 +16624,7 @@ function NativeKeyPopup({ providerId, native, directory, directoryState, nativeC
   const busy = native.action !== null;
   const keys = native.keys ?? [];
   const configuredCount = keys.filter((entry) => entry.configured).length;
+  const totals = usageTotalsOf(native);
   const chooseTier = async (value) => {
     if (!current || !directory || tierBusy) return;
     setTierBusy(true);
@@ -16373,11 +16642,16 @@ function NativeKeyPopup({ providerId, native, directory, directoryState, nativeC
       setLabelDraft("");
     }
   };
+  const resetProviderUsage = () => {
+    if (typeof window !== "undefined" && !window.confirm(text(t, "native.resetUsageAllConfirm"))) return;
+    void nativeController.resetUsage(providerId, null);
+  };
   const title = native.entry?.displayName ?? group?.name ?? providerId;
   return h(
     "div",
     {
       className: "dockyard-dsh-popup",
+      "data-size": size,
       role: "dialog",
       "aria-label": text(t, "native.keyAria", { title }),
       onMouseDown: (event) => event.stopPropagation()
@@ -16407,8 +16681,45 @@ function NativeKeyPopup({ providerId, native, directory, directoryState, nativeC
       h(
         "div",
         { className: "dockyard-dsh-toolbar" },
-        h("button", { type: "button", className: "dockyard-dsh-action dockyard-dsh-action-primary", disabled: busy, onClick: () => nativeController.refresh(providerId) }, native.action === "refresh" ? text(t, "status.refreshing") : text(t, "native.refresh"))
+        h(
+          "button",
+          { type: "button", className: "dockyard-dsh-action dockyard-dsh-action-primary", disabled: busy, onClick: () => setShowKeyForm((value) => !value) },
+          showKeyForm ? text(t, "native.addKeyHide") : text(t, "native.addKeyShow")
+        ),
+        h("button", { type: "button", className: "dockyard-dsh-action", disabled: busy, onClick: () => nativeController.refresh(providerId) }, native.action === "refresh" ? text(t, "status.refreshing") : text(t, "native.refresh")),
+        h("button", {
+          type: "button",
+          className: "dockyard-dsh-action dockyard-dsh-action-danger",
+          disabled: busy || !totals,
+          title: text(t, "native.resetUsageAllTitle"),
+          onClick: resetProviderUsage
+        }, text(t, "native.resetUsageAll"))
       ),
+      showKeyForm ? h(
+        "div",
+        { className: "dockyard-dsh-key-form" },
+        h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "native.addKeyTitle")), h("span", { className: "dockyard-dsh-section-value" }, text(t, "native.credentialsWrite"))),
+        h(
+          "div",
+          { className: "dockyard-dsh-key-form-row" },
+          h("input", {
+            className: "dockyard-dsh-key-input",
+            type: "password",
+            value: keyDraft,
+            placeholder: text(t, "native.pasteApiKey"),
+            autoComplete: "off",
+            onChange: (event) => setKeyDraft(event.target.value)
+          }),
+          h("button", { type: "button", className: "dockyard-dsh-key-save", disabled: busy || !keyDraft.trim(), onClick: addKey }, native.action === "add" ? text(t, "native.saving") : text(t, "native.save"))
+        ),
+        h("input", {
+          className: "dockyard-dsh-key-input",
+          type: "text",
+          value: labelDraft,
+          placeholder: text(t, "native.optionalName"),
+          onChange: (event) => setLabelDraft(event.target.value)
+        })
+      ) : null,
       h("div", { className: "dockyard-dsh-key-notice" }, native.runtimeMode === "request-key-pool" ? text(t, "native.notice.requestPool") : text(t, "native.notice.manual")),
       h(
         "div",
@@ -16427,65 +16738,41 @@ function NativeKeyPopup({ providerId, native, directory, directoryState, nativeC
           h("option", { value: "manual" }, text(t, "nativePolicy.manual")),
           h("option", { value: "round_robin", disabled: native.runtimeMode !== "request-key-pool" }, text(t, "nativePolicy.round_robin")),
           h("option", { value: "failover", disabled: native.runtimeMode !== "request-key-pool" }, text(t, "nativePolicy.failover"))
-        ),
-        h(
-          "div",
-          { className: "dockyard-dsh-key-form" },
-          h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "native.addKeyTitle")), h("span", { className: "dockyard-dsh-section-value" }, text(t, "native.credentialsWrite"))),
-          h(
-            "div",
-            { className: "dockyard-dsh-key-form-row" },
-            h("input", {
-              className: "dockyard-dsh-key-input",
-              type: "password",
-              value: keyDraft,
-              placeholder: text(t, "native.pasteApiKey"),
-              autoComplete: "off",
-              onChange: (event) => setKeyDraft(event.target.value)
-            }),
-            h("button", { type: "button", className: "dockyard-dsh-key-save", disabled: busy || !keyDraft.trim(), onClick: addKey }, native.action === "add" ? text(t, "native.saving") : text(t, "native.save"))
-          ),
-          h("input", {
-            className: "dockyard-dsh-key-input",
-            type: "text",
-            value: labelDraft,
-            placeholder: text(t, "native.optionalName"),
-            onChange: (event) => setLabelDraft(event.target.value)
-          })
-        ),
-        efforts.length > 0 ? h(
-          "div",
-          { className: "dockyard-dsh-section" },
-          h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "native.currentModelTier")), h("span", { className: "dockyard-dsh-section-value" }, text(t, "subscription.liveCatalog"))),
-          h("div", { className: "dockyard-dsh-tier-list" }, efforts.map((effort) => h("button", {
-            type: "button",
-            className: "dockyard-dsh-tier",
-            "data-active": tier === effort.id,
-            disabled: tierBusy,
-            key: effort.id,
-            title: effort.description ?? effort.id,
-            onClick: () => chooseTier(effort.id)
-          }, effort.name ?? effort.id)))
-        ) : null,
-        h(
-          "div",
-          { className: "dockyard-dsh-section" },
-          h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "native.configuredKeys")), h("span", { className: "dockyard-dsh-section-value" }, `${configuredCount}`)),
-          keys.length === 0 ? h("div", { className: "dockyard-dsh-muted" }, text(t, "native.noKeys")) : keys.map((entry) => h(NativeKeyCard, {
-            t,
-            key: entry.ref,
-            entry,
-            providerId,
-            controller: nativeController,
-            busy
-          }))
-        ),
-        h(
-          "div",
-          { className: "dockyard-dsh-section" },
-          h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "native.quotaWindow")), h("span", { className: "dockyard-dsh-section-value" }, text(t, "native.providerRealtime"))),
-          nativeQuotaView(native, t)
         )
+      ),
+      h(
+        "div",
+        { className: "dockyard-dsh-section" },
+        h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "native.configuredKeys")), h("span", { className: "dockyard-dsh-section-value" }, text(t, "native.keyCountSummary", { configured: configuredCount, total: keys.length }))),
+        totals && totals.requests > 0 ? tokenUsageView(totals, t) : null,
+        keys.length === 0 ? h("div", { className: "dockyard-dsh-muted" }, text(t, "native.noKeys")) : h("div", { className: "dockyard-dsh-keytable" }, keys.map((entry) => h(NativeKeyCard, {
+          t,
+          key: entry.ref,
+          entry,
+          providerId,
+          controller: nativeController,
+          busy,
+          open: expandedRef === entry.ref,
+          onToggle: (ref) => setExpandedRef((previous) => previous === ref ? null : ref)
+        })))
+      ),
+      efforts.length > 0 ? h(
+        Fold,
+        { title: text(t, "native.currentModelTier"), value: text(t, "subscription.liveCatalog") },
+        h("div", { className: "dockyard-dsh-tier-list" }, efforts.map((effort) => h("button", {
+          type: "button",
+          className: "dockyard-dsh-tier",
+          "data-active": tier === effort.id,
+          disabled: tierBusy,
+          key: effort.id,
+          title: effort.description ?? effort.id,
+          onClick: () => chooseTier(effort.id)
+        }, effort.name ?? effort.id)))
+      ) : null,
+      h(
+        Fold,
+        { title: text(t, "native.quotaWindow"), value: text(t, "native.providerRealtime") },
+        nativeQuotaView(native, t)
       )
     )
   );
@@ -16572,7 +16859,7 @@ function SubscriptionOverviewPopup({ providers, directoryState, controlState, co
     )
   );
 }
-function DockyardPopup({ providerId, provider, directory, directoryState, controlState, controller, onOpenOverview, onClose, t }) {
+function DockyardPopup({ providerId, provider, directory, directoryState, controlState, controller, onOpenOverview, onClose, t, size = "normal" }) {
   const [tierBusy, setTierBusy] = useState(false);
   const { current, group, model, efforts } = modelDetails(directoryState, providerId);
   const modelLabel = model?.name ?? current?.model ?? text(t, "title.noModel");
@@ -16597,6 +16884,7 @@ function DockyardPopup({ providerId, provider, directory, directoryState, contro
     "div",
     {
       className: "dockyard-dsh-popup",
+      "data-size": size,
       role: "dialog",
       "aria-label": `${providerDisplayName(providerId, provider?.manifest, t)} ${text(t, "trigger.accountQuota")}`,
       onMouseDown: (event) => event.stopPropagation()
@@ -16734,6 +17022,11 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
     message: null
   } : null;
   const accountSignature = connectedAccountSignature(controlState.snapshot);
+  const managedRowCount = Math.max(
+    Array.isArray(currentNative?.keys) ? currentNative.keys.length : 0,
+    Array.isArray(provider?.accounts) ? provider.accounts.length : 0
+  );
+  const popupSize = managedRowCount >= 3 ? "wide" : "normal";
   useEffect(() => {
     installStyles();
   }, []);
@@ -16802,6 +17095,8 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
   }, [open]);
   useEffect(() => {
     if (!open || typeof window === "undefined") return void 0;
+    const desiredWidth = popupSize === "wide" ? 720 : 480;
+    const desiredMaxHeight = popupSize === "wide" ? 720 : 560;
     const updatePopupPosition = () => {
       const anchor = rootRef.current;
       if (!anchor) return;
@@ -16810,7 +17105,7 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
       const gap = 9;
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      const popupWidth = Math.min(480, Math.max(0, viewportWidth - margin * 2));
+      const popupWidth = Math.min(desiredWidth, Math.max(0, viewportWidth - margin * 2));
       const left = Math.min(
         Math.max(margin, rect.left),
         Math.max(margin, viewportWidth - popupWidth - margin)
@@ -16822,11 +17117,11 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
       if (openAbove) {
         anchor.style.setProperty("--dockyard-dsh-popup-top", "auto");
         anchor.style.setProperty("--dockyard-dsh-popup-bottom", `${Math.max(margin, viewportHeight - rect.top + gap)}px`);
-        anchor.style.setProperty("--dockyard-dsh-popup-max-height", `${Math.max(180, Math.min(560, availableAbove))}px`);
+        anchor.style.setProperty("--dockyard-dsh-popup-max-height", `${Math.max(180, Math.min(desiredMaxHeight, availableAbove))}px`);
       } else {
         anchor.style.setProperty("--dockyard-dsh-popup-top", `${margin}px`);
         anchor.style.setProperty("--dockyard-dsh-popup-bottom", "auto");
-        anchor.style.setProperty("--dockyard-dsh-popup-max-height", `${Math.max(180, viewportHeight - margin * 2)}px`);
+        anchor.style.setProperty("--dockyard-dsh-popup-max-height", `${Math.max(180, Math.min(desiredMaxHeight, viewportHeight - margin * 2))}px`);
       }
     };
     updatePopupPosition();
@@ -16836,7 +17131,7 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
       window.removeEventListener("resize", updatePopupPosition);
       window.removeEventListener("scroll", updatePopupPosition, true);
     };
-  }, [open, providerId, showOverview, providers.length]);
+  }, [open, providerId, showOverview, providers.length, popupSize]);
   const currentSelectedAccount = currentProvider?.defaultAccountId ? currentProvider.accounts?.find((account) => account.accountId === currentProvider.defaultAccountId) : currentProvider?.accounts?.length === 1 ? currentProvider.accounts[0] : null;
   const summary = currentProviderId && currentProvider ? currentProvider.accounts?.length > 1 && !currentProvider.defaultAccountId ? text(t, "summary.accountCount", { count: currentProvider.accounts.length }) : quotaSummary(currentSelectedAccount, t) : currentProviderId && currentNative ? text(t, "summary.keyCount", { count: currentNative.keys?.filter((entry) => entry.configured).length ?? 0 }) : currentProviderId && currentNativeLoading ? text(t, "status.reading") : "";
   const loading = controlState.action !== null || nativeState.action !== null || directoryState.status === "loading";
@@ -16908,6 +17203,7 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
       controlState,
       controller,
       t,
+      size: popupSize,
       onOpenOverview: openSubscriptionOverview,
       onClose: () => setOpen(false)
     }) : open && native ? h(NativeKeyPopup, {
@@ -16917,6 +17213,7 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
       directory: modelDirectory,
       directoryState,
       nativeController,
+      size: popupSize,
       onClose: () => setOpen(false)
     }) : null
   );

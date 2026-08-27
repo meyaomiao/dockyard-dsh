@@ -10,12 +10,12 @@ export class DshInjectionBridge {
     this.adapter = adapter;
   }
 
-  async mountProvider(providerModule, accountPool) {
+  async mountProvider(providerModule, accountPool, { usageSink = null } = {}) {
     const providerId = providerModule?.manifest?.id;
     if (!providerId) throw new ValidationError("Provider module is required");
     if (!this.runtime.has(providerId)) await this.runtime.register(providerModule);
 
-    const route = createProviderRoute({ providerModule, accountPool });
+    const route = createProviderRoute({ providerModule, accountPool, usageSink });
     this.#routes.set(providerId, route);
     if (this.adapter?.registerProviderRoute) {
       await this.adapter.registerProviderRoute(route, providerModule.manifest);

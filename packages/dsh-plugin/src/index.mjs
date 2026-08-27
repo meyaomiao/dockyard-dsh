@@ -17,6 +17,7 @@ import {
 import { createDockyardCommand, DockyardDshService } from "./dockyard-service.mjs";
 import { createDockyardCredentialStore } from "./dockyard-credential-store.mjs";
 import { NativeKeyPoolHost } from "./native-key-pool-host.mjs";
+import { TokenUsageLedger } from "./token-usage-ledger.mjs";
 
 export const name = "dockyard-dsh";
 export const inject = ["llm", "commands", "credentials", "settings"];
@@ -41,6 +42,12 @@ function contextLogger(ctx, name) {
 export function apply(ctx, config = {}) {
   const runtimeOptions = { ...(config.runtimeOptions ?? {}) };
   let catalogWarmers = [];
+  // One shared per-credential token ledger: OAuth routes report through the
+  // runtime's usageSink, native API keys through NativeKeyPoolHost. Only
+  // opaque refs/account ids ever reach it — never key material.
+  const usageLedger = config.usageLedger ?? new TokenUsageLedger({
+    logger: contextLogger(ctx, "dockyard-dsh"),
+  });
   if (!config.runtime && !runtimeOptions.providers) {
     const antigravityOptions = {
       ...(runtimeOptions.antigravity ?? {}),
@@ -78,6 +85,7 @@ export function apply(ctx, config = {}) {
       cursor: runtimeOptions.catalogLoaders?.cursor ?? createCursorCatalogLoader(runtimeOptions.cursor ?? {}),
     };
     runtimeOptions.providers = createDefaultProviderEntries(runtimeOptions);
+    runtimeOptions.usageLedger = runtimeOptions.usageLedger ?? usageLedger;
     catalogWarmers = Object.entries(runtimeOptions.catalogLoaders)
       .filter(([, loader]) => typeof loader === "function");
   }
@@ -152,6 +160,7 @@ export function apply(ctx, config = {}) {
       // from booting while the service graph is still settling.
       nativeKeyPool ??= new NativeKeyPoolHost(ctx, {
         logger: config.serviceOptions?.logger ?? contextLogger(ctx, "dockyard-dsh"),
+        usageLedger,
       });
       const nativeKeyPoolReady = nativeKeyPool.start();
       void nativeKeyPoolReady.catch((error) => {

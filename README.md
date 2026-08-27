@@ -29,6 +29,7 @@ Dockyard DSH 把多个官方 OAuth / 官方客户端会话接入 DeepSeek Harnes
 - 扫描本机已有的官方登录态；扫描和新增账号是两个独立操作，已有账号不会被“新增”静默重复导入。
 - 支持手动选择、sticky session、round-robin 和 failover 账号池策略。
 - 读取 provider 返回的实时模型目录、推理档位、套餐和额度窗口。
+- 每个 provider 的每个凭据（API Key ref 或 OAuth 账号）都有独立的本地 Token 使用记录：累计总量、按天汇总和最近请求明细，跟随手动 / 轮询 / 失败转移的每次 Key 切换分别记账，可在弹窗中一键清空；记录只保存凭据引用，永不接触密钥明文。
 - 所有命令、模型选择和 LLM 生成都读取同一个 Dockyard runtime，不维护第二套账号池或额度缓存。
 
 ### 平台支持：macOS 已发布，Windows 构建完成

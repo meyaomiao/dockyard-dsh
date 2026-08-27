@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import * as http2 from "node:http2";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import {
   nativeProviderError,
@@ -10,6 +11,7 @@ import {
 } from "../../../packages/providers/src/native-transport.mjs";
 import {
   cursorNativeProtocolConstants,
+  decodeCursorTruncateFlag,
   cursorTurnComplete,
   cursorFrameMetadata,
   decodeConnectFrames,
@@ -144,6 +146,14 @@ function cursorHeaders(endpoint, token, requestId, env) {
   };
 }
 
+
+// [临时诊断] Cursor 流式黑匣子：记录每帧与终态，便于定位 premature EOF 类上游截断
+const CURSOR_DEBUG_FILE = "/tmp/dockyard-cursor-debug.log";
+let cursorDebugSeq = 0;
+function cursorDebug(line) {
+  try { appendFileSync(CURSOR_DEBUG_FILE, `${new Date().toISOString()} #${++cursorDebugSeq} ${line}\n`); } catch {}
+}
+
 function cursorStatusError(status) {
   return nativeProviderError(PROVIDER_ID, `Cursor AgentService returned HTTP ${status}`, { status });
 }
@@ -169,6 +179,9 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
       timeZone,
     });
     const url = new URL(endpoint);
+    const sid = `S${Date.now().toString(36)}`;
+    const tokenFP = createHash("sha256").update(String(token)).digest("hex").slice(0, 8);
+    cursorDebug(`${sid} BEGIN model=${model} endpoint=${url.host} token=${tokenFP}`);
     const session = http2Module.connect(url.origin);
     const queue = createAsyncQueue();
     let stream = null;
@@ -181,6 +194,7 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
       return error;
     };
     let completed = false;
+    let truncated = null;
     let cleaned = false;
     let heartbeat;
     const cleanup = () => {
@@ -198,11 +212,12 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
       stream?.close(http2Module.constants?.NGHTTP2_CANCEL);
       session.close();
     };
-    session.once("error", (error) => queue.fail(error));
+    session.once("error", (error) => { cursorDebug(`${sid} SESSION-ERROR ${error.message} code=${error.code ?? ""}`); queue.fail(error); });
     try {
       stream = session.request(cursorHeaders(url, token, requestId, context.env ?? process.env));
       stream.once("response", (headers) => {
         responseStatus = Number(headers[":status"] ?? 0);
+        cursorDebug(`${sid} STATUS ${responseStatus} ct=${headers["content-type"] ?? "?"}`);
         if (responseStatus >= 400) queue.fail(cursorStatusError(responseStatus));
       });
       stream.on("data", (chunk) => {
@@ -213,9 +228,11 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
         const decoded = decodeConnectFrames(merged);
         responseBuffer = decoded.rest;
         for (const frame of decoded.frames) {
+          if (process.env.DOCKYARD_CURSOR_TRACE === "1") cursorDebug(`${sid} FRAME flags=${frame.flags} len=${frame.payload.length}`);
           if ((frame.flags & 0x02) !== 0) {
             const trailer = decodeCursorConnectTrailer(frame.payload);
             if (trailer) {
+              cursorDebug(`${sid} TRAILER-ERROR code=${trailer.code} msg=${trailer.message}`);
               queue.fail(nativeProviderError(PROVIDER_ID, trailer.message, {
                 code: trailer.code,
                 body: { code: trailer.code, message: trailer.message },
@@ -229,6 +246,11 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
           if ((frame.flags & 0x01) !== 0) {
             responseDiagnostics.push(cursorFrameMetadata(frame.payload, frame.flags));
             queue.fail(protocolError("Cursor returned a compressed protobuf frame", "CURSOR_COMPRESSED_RESPONSE"));
+            continue;
+          }
+          if (truncated === null && frame.payload.length < 64 && decodeCursorTruncateFlag(frame.payload)) {
+            truncated = true;
+            cursorDebug(`${sid} TRUNCATE-FLAG received — server asks to shorten conversation`);
             continue;
           }
           const kv = decodeCursorKvRequest(frame.payload);
@@ -251,6 +273,10 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
         }
       });
       stream.once("end", () => {
+        if (truncated) {
+          queue.fail(nativeProviderError(PROVIDER_ID, "Cursor requested conversation truncation", { code: "CURSOR_TRUNCATE_REQUESTED" }));
+        }
+        cursorDebug(`${sid} END completed=${completed} leftover=${responseBuffer.byteLength}B diag=${responseDiagnostics.length}${responseBuffer.byteLength > 0 ? ` leftoverHex=${Buffer.from(responseBuffer.slice(0, 64)).toString("hex")}` : ""}`);
         if (responseBuffer.byteLength > 0) {
           responseDiagnostics.push({
             payloadLength: responseBuffer.byteLength,
@@ -261,7 +287,7 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
           queue.close();
         }
       });
-      stream.once("error", (error) => queue.fail(error));
+      stream.once("error", (error) => { cursorDebug(`${sid} STREAM-ERROR ${error.message} code=${error.code ?? ""}`); queue.fail(error); });
       stream.write(Buffer.from(encoded.frame));
       heartbeat = setInterval(() => {
         if (!stream || stream.destroyed || stream.closed) return;
@@ -336,7 +362,35 @@ export function createCursorNativeExecutor({
         throw error;
       }
     }
-    return streamCursor({ endpoint: safeEndpoint, token: auth.token, request, context, http2Module });
+    // 上游偶发把流拦腰截断（premature EOF / incomplete Connect frame）。
+    // 若本次还没吐出任何文本，原样重试一次；已产出内容则不重试避免重复输出。
+    const RETRYABLE_CODES = new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED"]);
+    let lastError = null;
+    let messages = request.messages;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      let emittedText = false;
+      try {
+        const stream = streamCursor({ endpoint: safeEndpoint, token: auth.token, request: { ...request, messages }, context, http2Module });
+        async function* guard() {
+          for await (const chunk of stream) {
+            if (chunk?.type === "text-delta") emittedText = true;
+            yield chunk;
+          }
+        }
+        return guard();
+      } catch (error) {
+        lastError = error;
+        const retriable = RETRYABLE_CODES.has(error?.code ?? "") && !(error?.status >= 400);
+        // 服务端要求截断：无论是否已产出文本都重试，并把历史对半减掉
+        if (error?.code === "CURSOR_TRUNCATE_REQUESTED" && Array.isArray(messages) && messages.length > 1) {
+          messages = messages.slice(Math.ceil(messages.length / 2));
+          continue;
+        }
+        if (attempt === 0 && retriable && !emittedText) continue;
+        throw error;
+      }
+    }
+    throw lastError;
   };
   executor.nativeTransport = "cursor-connect-agent-service";
   return executor;

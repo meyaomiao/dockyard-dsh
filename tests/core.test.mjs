@@ -354,8 +354,10 @@ test("DSH LLM adapter delegates provider-neutral streaming to the selected route
       defaultEffort: "medium",
     },
   }]);
+  const prepared = await adapter.prepareCall("openai-codex", "live-model");
+  assert.equal(prepared.model.id, "live-model");
   const chunks = [];
-  for await (const chunk of adapter.stream({ provider: "openai-codex", model: "live-model", sessionId: "session-a" })) {
+  for await (const chunk of prepared.stream({ provider: "openai-codex", model: "live-model", sessionId: "session-a" })) {
     chunks.push(chunk);
   }
   assert.equal(chunks[0].text, "ok");
@@ -630,4 +632,79 @@ test("DSH service collapses concurrent OAuth starts into one provider session", 
   assert.equal(first.sessionId, second.sessionId);
   assert.deepEqual(opened, ["https://provider.test/oauth"]);
   await service.dispose();
+});
+
+test("provider route reports per-account token usage through the usage sink", async () => {
+  const pool = new AccountPool({
+    providerId: "test-provider",
+    policy: ACCOUNT_SELECTION_POLICY.FAILOVER,
+    clock: fixedNow,
+  });
+  addAccount(pool, "account-a", { remaining: 0, limit: 10, unit: "requests" });
+  addAccount(pool, "account-b", { remaining: 10, limit: 10, unit: "requests" });
+  const reports = [];
+  const providerModule = {
+    manifest: { id: "test-provider" },
+    async *stream(_request, { account }) {
+      yield {
+        type: "usage",
+        usage: { inputTokens: account.accountId === "account-a" ? 50 : 70, outputTokens: 5 },
+      };
+      yield { type: "block-start", index: 0, blockType: "text" };
+      if (account.accountId === "account-a") {
+        const error = new Error("quota exhausted");
+        error.rateLimited = true;
+        throw error;
+      }
+      yield { type: "text-delta", index: 0, text: "ok" };
+      yield { type: "finish", reason: { kind: "stop" } };
+    },
+  };
+  const route = createProviderRoute({
+    providerModule,
+    accountPool: pool,
+    usageSink: (providerId, accountId, info) => reports.push([providerId, accountId, info]),
+  });
+  const chunks = [];
+  for await (const chunk of route.stream({ model: "test-model" }, {})) chunks.push(chunk);
+
+  assert.equal(chunks.some((chunk) => chunk.reason?.kind === "error"), false);
+  assert.deepEqual(reports.map(([providerId, accountId, info]) => [providerId, accountId, info.status]), [
+    ["test-provider", "account-a", "failure"],
+    ["test-provider", "account-b", "success"],
+  ]);
+  assert.equal(reports[0][2].usage.inputTokens, 50);
+  assert.equal(reports[0][2].model, "test-model");
+  assert.equal(reports[1][2].usage.inputTokens, 70);
+});
+
+test("a throwing usage sink never breaks or alters the provider stream", async () => {
+  const pool = new AccountPool({
+    providerId: "test-provider",
+    policy: ACCOUNT_SELECTION_POLICY.MANUAL,
+    clock: fixedNow,
+  });
+  addAccount(pool, "account-ok", { remaining: 1, limit: 2, unit: "requests" });
+  const providerModule = {
+    manifest: { id: "test-provider" },
+    async *stream() {
+      yield { type: "usage", usage: { inputTokens: 9, outputTokens: 1 } };
+      yield { type: "text-delta", index: 0, text: "ok" };
+      yield { type: "finish", reason: { kind: "stop" } };
+    },
+  };
+  const route = createProviderRoute({
+    providerModule,
+    accountPool: pool,
+    usageSink: () => {
+      throw new Error("sink exploded");
+    },
+  });
+  const chunks = [];
+  for await (const chunk of route.stream({ model: "test-model" }, {})) chunks.push(chunk);
+  assert.deepEqual(chunks, [
+    { type: "usage", usage: { inputTokens: 9, outputTokens: 1 } },
+    { type: "text-delta", index: 0, text: "ok" },
+    { type: "finish", reason: { kind: "stop" } },
+  ]);
 });

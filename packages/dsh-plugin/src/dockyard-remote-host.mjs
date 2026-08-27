@@ -122,6 +122,13 @@ export class DockyardRemoteService extends TypertRemoteService {
     if (!this.nativeKeyPool) throw new Error("Dockyard Native Key Pool 尚未挂载");
     return this.nativeKeyPool.setPolicy(request.providerId, request.policy);
   }
+
+  async usageReset(request = {}) {
+    if (!this.nativeKeyPool) throw new Error("Dockyard Native Key Pool 尚未挂载");
+    // ref 为空时清空整个 provider 的用量；否则只重置单个凭据（API Key ref
+    // 或 OAuth accountId 共用同一台账键空间）。
+    return this.nativeKeyPool.resetUsage(request.providerId, request.ref ?? null);
+  }
 }
 
 function markRemoteMethods() {
@@ -129,6 +136,7 @@ function markRemoteMethods() {
   for (const name of [
     "snapshot", "refresh", "scan", "add", "login", "poll", "submitAuthorizationCode", "cancel", "setPolicy", "use", "removeAccount",
     "nativeKeyStatus", "nativeKeyRefresh", "nativeKeyRegister", "nativeKeyUnregister", "nativeKeySetPolicy",
+    "usageReset",
   ]) {
     let initializer;
     Remote(name)(undefined, {
