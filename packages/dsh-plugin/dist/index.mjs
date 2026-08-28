@@ -7575,6 +7575,8 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
     };
     let completed = false;
     let truncated = null;
+    let lastActivityAt = Date.now();
+    const idleTimeoutMs = Number(process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS ?? 6e4);
     let cleaned = false;
     let heartbeat;
     const cleanup = () => {
@@ -7605,10 +7607,12 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
       stream = session.request(cursorHeaders(url, token, requestId, context.env ?? process.env));
       stream.once("response", (headers) => {
         responseStatus = Number(headers[":status"] ?? 0);
+        lastActivityAt = Date.now();
         cursorDebug(`${sid} STATUS ${responseStatus} ct=${headers["content-type"] ?? "?"}`);
         if (responseStatus >= 400) queue.fail(cursorStatusError(responseStatus));
       });
       stream.on("data", (chunk) => {
+        lastActivityAt = Date.now();
         const incoming = new Uint8Array(chunk);
         const merged = new Uint8Array(responseBuffer.byteLength + incoming.byteLength);
         merged.set(responseBuffer);
@@ -7684,13 +7688,21 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
         queue.fail(wrapTransportError(error));
       });
       stream.write(Buffer.from(encoded.frame));
+      const idleTickMs = Math.max(250, Math.min(5e3, Math.floor(idleTimeoutMs / 2)));
       heartbeat = setInterval(() => {
+        if (completed) return;
+        const idleForMs = Date.now() - lastActivityAt;
+        if (idleForMs > idleTimeoutMs) {
+          cursorDebug(`${sid} IDLE-TIMEOUT ${Math.round(idleForMs / 1e3)}s without server bytes`);
+          queue.fail(nativeProviderError(PROVIDER_ID8, `Cursor connection idle for ${Math.round(idleForMs / 1e3)}s`, { code: "CURSOR_IDLE_TIMEOUT" }));
+          return;
+        }
         if (!stream || stream.destroyed || stream.closed) return;
         try {
           stream.write(Buffer.from(encodeHeartbeat()));
         } catch {
         }
-      }, 5e3);
+      }, idleTickMs);
       context.signal?.addEventListener?.("abort", onAbort, { once: true });
       let text3 = "";
       let failed = false;
@@ -7736,7 +7748,7 @@ function createCursorNativeExecutor({
   http2Module = http2
 } = {}) {
   const safeEndpoint = validateNativeEndpoint(endpoint2, { providerId: PROVIDER_ID8 });
-  const RETRYABLE_CODES = /* @__PURE__ */ new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED"]);
+  const RETRYABLE_CODES = /* @__PURE__ */ new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED", "CURSOR_IDLE_TIMEOUT"]);
   const RETRYABLE_STREAM_CODES = /* @__PURE__ */ new Set(["ETIMEDOUT", "ECONNRESET", "EPIPE", "ERR_HTTP2_STREAM_CANCEL"]);
   const executor = async function* ({ request = {}, invocation, context = {} } = {}) {
     let credential = null;

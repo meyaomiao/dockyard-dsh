@@ -195,6 +195,11 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
     };
     let completed = false;
     let truncated = null;
+    // 服务端活跃时间：只有对端来的字节（响应头/数据帧）才算数。
+    // 健康的 turn 每几秒就有帧流动；连续 IDLE_TIMEOUT_MS 一个字节都没有
+    // 说明被服务端黑洞了，主动断掉交给 executor 重试，别让用户干等 4-9 分钟。
+    let lastActivityAt = Date.now();
+    const idleTimeoutMs = Number(process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS ?? 60_000);
     let cleaned = false;
     let heartbeat;
     const cleanup = () => {
@@ -224,10 +229,12 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
       stream = session.request(cursorHeaders(url, token, requestId, context.env ?? process.env));
       stream.once("response", (headers) => {
         responseStatus = Number(headers[":status"] ?? 0);
+        lastActivityAt = Date.now();
         cursorDebug(`${sid} STATUS ${responseStatus} ct=${headers["content-type"] ?? "?"}`);
         if (responseStatus >= 400) queue.fail(cursorStatusError(responseStatus));
       });
       stream.on("data", (chunk) => {
+        lastActivityAt = Date.now();
         const incoming = new Uint8Array(chunk);
         const merged = new Uint8Array(responseBuffer.byteLength + incoming.byteLength);
         merged.set(responseBuffer);
@@ -303,10 +310,18 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
       });
       stream.once("error", (error) => { cursorDebug(`${sid} STREAM-ERROR ${error.message} code=${error.code ?? ""}`); queue.fail(wrapTransportError(error)); });
       stream.write(Buffer.from(encoded.frame));
+      const idleTickMs = Math.max(250, Math.min(5_000, Math.floor(idleTimeoutMs / 2)));
       heartbeat = setInterval(() => {
+        if (completed) return;
+        const idleForMs = Date.now() - lastActivityAt;
+        if (idleForMs > idleTimeoutMs) {
+          cursorDebug(`${sid} IDLE-TIMEOUT ${Math.round(idleForMs / 1000)}s without server bytes`);
+          queue.fail(nativeProviderError(PROVIDER_ID, `Cursor connection idle for ${Math.round(idleForMs / 1000)}s`, { code: "CURSOR_IDLE_TIMEOUT" }));
+          return;
+        }
         if (!stream || stream.destroyed || stream.closed) return;
         try { stream.write(Buffer.from(encodeHeartbeat())); } catch { /* stream is closing */ }
-      }, 5_000);
+      }, idleTickMs);
       context.signal?.addEventListener?.("abort", onAbort, { once: true });
 
       let text = "";
@@ -357,7 +372,7 @@ export function createCursorNativeExecutor({
   // 上游偶发截断/断流。重试循环必须在 executor 里真正消费流：
   // streamCursor 是惰性 async generator，错误在消费阶段才抛，
   // 旧写法 return guard() 让外层 catch 永远接不到 → 重试是死代码。
-  const RETRYABLE_CODES = new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED"]);
+  const RETRYABLE_CODES = new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED", "CURSOR_IDLE_TIMEOUT"]);
   const RETRYABLE_STREAM_CODES = new Set(["ETIMEDOUT", "ECONNRESET", "EPIPE", "ERR_HTTP2_STREAM_CANCEL"]);
   const executor = async function* ({ request = {}, invocation, context = {} } = {}) {
     let credential = null;

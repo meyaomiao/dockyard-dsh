@@ -104,6 +104,32 @@ test("executor halves messages and retries when the server sends a truncated fla
   assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
 });
 
+test("executor fails over to a retry when the server goes byte-silent (idle timeout)", async () => {
+  process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS = "300";
+  try {
+    const writes = [];
+    const http2 = createFakeHttp2([
+      (stream) => {
+        // 第一次：响应头之后服务端一个字节都不发（黑洞），靠空闲超时主动断掉
+        stream.emit("response", OK_RESPONSE);
+      },
+      (stream) => {
+        stream.emit("response", OK_RESPONSE);
+        stream.emit("data", textFrame("late"));
+        stream.emit("data", completeTrailer());
+        stream.emit("end");
+      },
+    ], writes);
+    const chunks = await collect(createExecutor(http2));
+    assert.equal(http2.attempts(), 2, "byte-silent stream must be retried");
+    const text = chunks.filter((c) => c.type === "text-delta").map((c) => c.text).join("");
+    assert.equal(text, "late");
+    assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
+  } finally {
+    delete process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS;
+  }
+});
+
 test("executor retries transient stream errors (ETIMEDOUT) before any content is forwarded", async () => {
   const writes = [];
   const http2 = createFakeHttp2([
