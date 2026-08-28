@@ -64,9 +64,16 @@ function completeTrailer() {
 }
 
 function heartbeatDiagFrame() {
-  // 线上 F7：1.8.1 心跳/诊断帧。有字节但没有助手文本，不能续命进度超时。
+  // InteractionUpdate.heartbeat = field 13，空消息。不能续命进度超时。
   return PROTOCOL.frameConnectMessage(
-    PROTOCOL.bytesField(1, PROTOCOL.bytesField(8, PROTOCOL.varintField(1, 0))),
+    PROTOCOL.bytesField(1, PROTOCOL.bytesField(13, new Uint8Array())),
+  );
+}
+
+function tokenDeltaFrame() {
+  // InteractionUpdate.token_delta = field 8。Composer 思考时持续推这个。
+  return PROTOCOL.frameConnectMessage(
+    PROTOCOL.bytesField(1, PROTOCOL.bytesField(8, PROTOCOL.varintField(1, 12))),
   );
 }
 
@@ -192,6 +199,39 @@ test("executor fails over when the server only sends diagnostic heartbeats", asy
     const text = chunks.filter((c) => c.type === "text-delta").map((c) => c.text).join("");
     assert.equal(text, "pong");
     assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
+  } finally {
+    delete process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS;
+  }
+});
+
+test("token_delta frames count as progress and keep Deep diving alive", async () => {
+  process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS = "250";
+  try {
+    const writes = [];
+    const http2 = createFakeHttp2([
+      (stream) => {
+        stream.emit("response", OK_RESPONSE);
+        const tick = setInterval(() => {
+          if (stream.closed || stream.destroyed) {
+            clearInterval(tick);
+            return;
+          }
+          stream.emit("data", tokenDeltaFrame());
+        }, 60);
+        setTimeout(() => {
+          clearInterval(tick);
+          stream.emit("data", textFrame("done"));
+          stream.emit("data", completeTrailer());
+          stream.emit("end");
+        }, 700);
+        const originalClose = stream.close;
+        stream.close = (...args) => { clearInterval(tick); return originalClose?.(...args); };
+      },
+    ], writes);
+    const chunks = await collect(createExecutor(http2));
+    assert.equal(http2.attempts(), 1, "token_delta must count as model work");
+    const text = chunks.filter((c) => c.type === "text-delta").map((c) => c.text).join("");
+    assert.equal(text, "done");
   } finally {
     delete process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS;
   }

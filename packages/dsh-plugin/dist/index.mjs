@@ -7342,6 +7342,16 @@ function cursorTurnComplete(message) {
     return false;
   }
 }
+var CURSOR_WORK_FIELDS = /* @__PURE__ */ new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17]);
+function cursorHasWorkFrame(message) {
+  try {
+    const interaction = firstBytes(decodeProtoFields(message), 1);
+    if (!interaction) return false;
+    return decodeProtoFields(interaction).some((field) => CURSOR_WORK_FIELDS.has(field.field));
+  } catch {
+    return false;
+  }
+}
 function decodeKvRequest(message) {
   const kv = firstBytes(decodeProtoFields(message), 4);
   if (!kv) return null;
@@ -7546,7 +7556,7 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
     let lastProgressAt = Date.now();
     let producedText = false;
     let loggedDiag = 0;
-    const idleTimeoutMs = Number(process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS ?? 6e4);
+    const idleTimeoutMs = Number(process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS ?? 18e4);
     let cleaned = false;
     let heartbeat;
     const cleanup = () => {
@@ -7627,6 +7637,8 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
           }
           const text4 = decodeCursorText(frame.payload);
           const turnComplete = cursorTurnComplete(frame.payload);
+          const working = cursorHasWorkFrame(frame.payload);
+          if (working) lastProgressAt = Date.now();
           if (text4) {
             producedText = true;
             lastProgressAt = Date.now();

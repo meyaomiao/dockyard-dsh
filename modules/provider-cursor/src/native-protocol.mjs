@@ -360,6 +360,22 @@ export function cursorTurnComplete(message) {
   }
 }
 
+// InteractionUpdate oneof that means the model is actually working — not the
+// 1.8 token_delta tick or 1.13 heartbeat that Composer uses as keepalive.
+// 8 = token_delta：Composer 思考时会持续推这个，官方 App 据此保活。
+// 13 = heartbeat：空 keepalive，不能当进度。
+const CURSOR_WORK_FIELDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17]);
+
+export function cursorHasWorkFrame(message) {
+  try {
+    const interaction = firstBytes(decodeProtoFields(message), 1);
+    if (!interaction) return false;
+    return decodeProtoFields(interaction).some((field) => CURSOR_WORK_FIELDS.has(field.field));
+  } catch {
+    return false;
+  }
+}
+
 function decodeKvRequest(message) {
   const kv = firstBytes(decodeProtoFields(message), 4);
   if (!kv) return null;

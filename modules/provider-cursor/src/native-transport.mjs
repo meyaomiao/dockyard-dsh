@@ -13,6 +13,7 @@ import {
   cursorNativeProtocolConstants,
   decodeCursorTruncateFlag,
   cursorTurnComplete,
+  cursorHasWorkFrame,
   cursorFrameMetadata,
   decodeConnectFrames,
   decodeCursorConnectTrailer,
@@ -204,7 +205,7 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
     let lastProgressAt = Date.now();
     let producedText = false;
     let loggedDiag = 0;
-    const idleTimeoutMs = Number(process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS ?? 60_000);
+    const idleTimeoutMs = Number(process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS ?? 180_000);
     let cleaned = false;
     let heartbeat;
     const cleanup = () => {
@@ -284,6 +285,8 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
           }
           const text = decodeCursorText(frame.payload);
           const turnComplete = cursorTurnComplete(frame.payload);
+          const working = cursorHasWorkFrame(frame.payload);
+          if (working) lastProgressAt = Date.now();
           if (text) {
             producedText = true;
             lastProgressAt = Date.now();
