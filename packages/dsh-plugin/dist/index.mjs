@@ -7172,18 +7172,6 @@ function firstString6(fields, field) {
   const bytes = firstBytes(fields, field);
   return bytes ? textDecoder.decode(bytes) : "";
 }
-function sha256(bytes) {
-  return new Uint8Array(createHash7("sha256").update(bytes).digest());
-}
-function putBlob(store, value) {
-  const bytes = value instanceof Uint8Array ? value : textEncoder.encode(String(value));
-  const id = sha256(bytes);
-  store.set(Buffer.from(id).toString("hex"), bytes);
-  return id;
-}
-function jsonBlob(store, value) {
-  return putBlob(store, textEncoder.encode(JSON.stringify(value)));
-}
 function normalizeText(content) {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) return content.map(normalizeText).filter(Boolean).join("");
@@ -7207,39 +7195,8 @@ function normalizedMessages(messages) {
 function encodeUserMessage(text3, messageId, mode = 1) {
   return concatBytes([stringField(1, text3), stringField(2, messageId), varintField(4, mode)]);
 }
-function encodeAssistantStep(text3) {
-  const assistantMessage = stringField(1, text3);
-  const conversationStep = bytesField(1, assistantMessage);
-  return conversationStep;
-}
 function encodeConversationState(messages, blobStore, requestId) {
-  const roots = [];
-  const turns = [];
-  const turnRecords = [];
-  for (const message of messages) {
-    if (message.role === "system") {
-      roots.push(jsonBlob(blobStore, { role: "system", content: message.content }));
-      continue;
-    }
-    if (message.role === "user") {
-      const userMessage = { role: "user", content: [{ type: "text", text: message.content }] };
-      roots.push(jsonBlob(blobStore, userMessage));
-      turnRecords.push({ text: message.content, steps: [] });
-      continue;
-    }
-    if (message.role === "assistant") {
-      roots.push(jsonBlob(blobStore, { role: "assistant", content: [{ type: "text", text: message.content }] }));
-      turnRecords.at(-1)?.steps.push(putBlob(blobStore, encodeAssistantStep(message.content)));
-      continue;
-    }
-    const resultText = `[Tool Result]
-${message.content}`;
-    roots.push(jsonBlob(blobStore, { role: "user", content: [{ type: "text", text: resultText }] }));
-    turnRecords.at(-1)?.steps.push(putBlob(blobStore, encodeAssistantStep(resultText)));
-  }
-  return concatBytes([
-    ...roots.map((id) => bytesField(1, id))
-  ]);
+  return new Uint8Array();
 }
 function encodeRequestContext(timeZone = "UTC") {
   const env = stringField(10, timeZone);
@@ -7562,7 +7519,7 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
     const url = new URL(endpoint2);
     const sid = `S${Date.now().toString(36)}`;
     const tokenFP = createHash8("sha256").update(String(token)).digest("hex").slice(0, 8);
-    cursorDebug(`${sid} BEGIN model=${model} endpoint=${url.host} token=${tokenFP}`);
+    cursorDebug(`${sid} BEGIN model=${model} endpoint=${url.host} token=${tokenFP} bytes=${encoded.frame.byteLength}`);
     const session = http2Module.connect(url.origin);
     const queue = createAsyncQueue();
     let stream = null;

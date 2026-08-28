@@ -175,37 +175,14 @@ function encodeConversationTurn(userMessageId, stepIds, requestId) {
 }
 
 function encodeConversationState(messages, blobStore, requestId) {
-  const roots = [];
-  const turns = [];
-  const turnRecords = [];
-  for (const message of messages) {
-    if (message.role === "system") {
-      roots.push(jsonBlob(blobStore, { role: "system", content: message.content }));
-      continue;
-    }
-    if (message.role === "user") {
-      const userMessage = { role: "user", content: [{ type: "text", text: message.content }] };
-      roots.push(jsonBlob(blobStore, userMessage));
-      turnRecords.push({ text: message.content, steps: [] });
-      continue;
-    }
-    if (message.role === "assistant") {
-      roots.push(jsonBlob(blobStore, { role: "assistant", content: [{ type: "text", text: message.content }] }));
-      turnRecords.at(-1)?.steps.push(putBlob(blobStore, encodeAssistantStep(message.content)));
-      continue;
-    }
-    const resultText = `[Tool Result]\n${message.content}`;
-    roots.push(jsonBlob(blobStore, { role: "user", content: [{ type: "text", text: resultText }] }));
-    turnRecords.at(-1)?.steps.push(putBlob(blobStore, encodeAssistantStep(resultText)));
-  }
-  // Turns omitted (fix 2026-08-28): the server depth-decodes turn blobs with its own
-  // schema; our guessed field layout derails its decoder => "illegal tag: field no N
-  // wire type 6/7", "cant skip wire type 4", "premature EOF". Full history is already
-  // inlined into the current user message, so turns are not required. Verified live
-  // against agent.api5.cursor.sh: roots-only completes where roots+turns fails.
-  return concatBytes([
-    ...roots.map((id) => bytesField(1, id)),
-  ]);
+  // Conversation state is sent EMPTY (verified live 2026-08-28: roots-only and
+  // empty-state both complete while roots+turns derails the server decoder).
+  // The full history is already inlined into the current user message; sending
+  // it again as JSON blobs doubled the request body, and oversized Run POSTs
+  // are the documented trigger for server-side throttling/blackholing
+  // (ENHANCE_YOUR_CALM class, see forum.cursor.com/t/169731). Fewer bytes and
+  // zero KV round-trips => fewer stalls.
+  return new Uint8Array();
 }
 
 function encodeRequestContext(timeZone = "UTC") {

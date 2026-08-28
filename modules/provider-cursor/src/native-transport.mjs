@@ -181,7 +181,7 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
     const url = new URL(endpoint);
     const sid = `S${Date.now().toString(36)}`;
     const tokenFP = createHash("sha256").update(String(token)).digest("hex").slice(0, 8);
-    cursorDebug(`${sid} BEGIN model=${model} endpoint=${url.host} token=${tokenFP}`);
+    cursorDebug(`${sid} BEGIN model=${model} endpoint=${url.host} token=${tokenFP} bytes=${encoded.frame.byteLength}`);
     const session = http2Module.connect(url.origin);
     const queue = createAsyncQueue();
     let stream = null;
