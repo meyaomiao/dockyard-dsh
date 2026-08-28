@@ -333,9 +333,18 @@ export function decodeCursorText(message) {
   try {
     const interaction = firstBytes(decodeProtoFields(message), 1);
     if (!interaction) return "";
-    const update = firstBytes(decodeProtoFields(interaction), 1);
-    if (!update) return "";
-    return firstString(decodeProtoFields(update), 1);
+    const fields = decodeProtoFields(interaction);
+    // InteractionUpdate oneof: 1=text_delta, 4=thinking_delta. Composer-2.5
+    // streams thinking on field 4 for a long time before any field-1 text;
+    // ignoring it makes DSH sit on "Deep diving..." while heartbeat frames
+    // keep the TCP session alive.
+    for (const field of [1, 4]) {
+      const update = firstBytes(fields, field);
+      if (!update) continue;
+      const text = firstString(decodeProtoFields(update), 1);
+      if (text) return text;
+    }
+    return "";
   } catch {
     return "";
   }

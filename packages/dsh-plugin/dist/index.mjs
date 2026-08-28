@@ -7321,9 +7321,14 @@ function decodeCursorText(message) {
   try {
     const interaction = firstBytes(decodeProtoFields(message), 1);
     if (!interaction) return "";
-    const update = firstBytes(decodeProtoFields(interaction), 1);
-    if (!update) return "";
-    return firstString6(decodeProtoFields(update), 1);
+    const fields = decodeProtoFields(interaction);
+    for (const field of [1, 4]) {
+      const update = firstBytes(fields, field);
+      if (!update) continue;
+      const text3 = firstString6(decodeProtoFields(update), 1);
+      if (text3) return text3;
+    }
+    return "";
   } catch {
     return "";
   }
@@ -7467,7 +7472,7 @@ function resolveCursorAccessToken(options = {}) {
   return session ? { token: session.token, kind: session.kind, ...session.expiresAt ? { expiresAt: session.expiresAt } : {} } : null;
 }
 function cursorHeaders(endpoint2, token, requestId, env) {
-  const clientVersion = env.DOCKYARD_CURSOR_CLIENT_VERSION ?? `cli-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10).replace(/-/g, ".")}-agent-host`;
+  const clientVersion = env.DOCKYARD_CURSOR_CLIENT_VERSION ?? "cli-2026.01.09-231024f";
   const clientKey = createHash8("sha256").update(`cursor-client-key:${token}`).digest("hex");
   return {
     ":method": "POST",
@@ -7478,11 +7483,11 @@ function cursorHeaders(endpoint2, token, requestId, env) {
     "content-type": "application/connect+proto",
     accept: "application/connect+proto",
     "connect-protocol-version": "1",
+    "x-ghost-mode": "true",
     "x-request-id": requestId,
     "x-cursor-client-version": clientVersion,
     "x-cursor-client-type": "cli",
-    "x-cursor-client-key": clientKey,
-    "x-cursor-streaming": "true"
+    "x-cursor-client-key": clientKey
   };
 }
 var CURSOR_DEBUG_FILE = "/tmp/dockyard-cursor-debug.log";

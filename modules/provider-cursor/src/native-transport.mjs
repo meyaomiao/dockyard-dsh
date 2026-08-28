@@ -126,10 +126,10 @@ export function resolveCursorAccessToken(options = {}) {
 }
 
 function cursorHeaders(endpoint, token, requestId, env) {
-  const clientVersion = env.DOCKYARD_CURSOR_CLIENT_VERSION
-    ?? `cli-${new Date().toISOString().slice(0, 10).replace(/-/g, ".")}-agent-host`;
-  // 稳定的 client key（按 token 派生）：官方客户端用稳定标识，每请求随机的
-  // key 等于自报家门"这是脚本"，容易被边缘风控限流/静默丢弃。
+  // 能工作的开源实现（opencode-cursor）用真实 CLI 版本号，而不是
+  // `cli-${today}-agent-host` 这种服务端不认识的假版本。假版本会被
+  // AgentService 降级成只推 heartbeat、不吐 text_delta。
+  const clientVersion = env.DOCKYARD_CURSOR_CLIENT_VERSION ?? "cli-2026.01.09-231024f";
   const clientKey = createHash("sha256").update(`cursor-client-key:${token}`).digest("hex");
   return {
     ":method": "POST",
@@ -140,11 +140,11 @@ function cursorHeaders(endpoint, token, requestId, env) {
     "content-type": "application/connect+proto",
     accept: "application/connect+proto",
     "connect-protocol-version": "1",
+    "x-ghost-mode": "true",
     "x-request-id": requestId,
     "x-cursor-client-version": clientVersion,
     "x-cursor-client-type": "cli",
     "x-cursor-client-key": clientKey,
-    "x-cursor-streaming": "true",
   };
 }
 

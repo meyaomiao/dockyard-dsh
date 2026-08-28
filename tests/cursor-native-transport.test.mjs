@@ -11,6 +11,14 @@ test("cursor truncate flag frame is recognized", () => {
   assert.equal(decodeCursorTruncateFlag(Buffer.from("0000000004deadbeef", "hex")), false);
 });
 
+test("decodeCursorText reads composer thinking_delta on interaction field 4", () => {
+  const { decodeCursorText } = PROTOCOL;
+  const thinking = PROTOCOL.bytesField(1, PROTOCOL.bytesField(4, PROTOCOL.stringField(1, "planning the next step")));
+  const answer = PROTOCOL.bytesField(1, PROTOCOL.bytesField(1, PROTOCOL.stringField(1, "PONG")));
+  assert.equal(decodeCursorText(thinking), "planning the next step");
+  assert.equal(decodeCursorText(answer), "PONG");
+});
+
 // ---- fake http2：第 N 次尝试由 handlers[N] 同步往 stream 上推帧 ----
 function createFakeHttp2(handlers, writes) {
   let attempt = 0;
