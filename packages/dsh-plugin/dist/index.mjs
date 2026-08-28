@@ -7242,11 +7242,16 @@ function encodeAgentRunRequest({
   const latestUserIndex = normalized.map((message) => message.role).lastIndexOf("user");
   const latestUserText = latestUserIndex >= 0 ? normalized[latestUserIndex].content : normalized.at(-1)?.content ?? "Continue the conversation.";
   const priorConversation = latestUserIndex > 0 ? normalized.slice(0, latestUserIndex).filter((message) => message.role !== "system").map((message) => `${message.role === "assistant" ? "Assistant" : "User"}: ${message.content}`).join("\n\n") : "";
-  const userText = priorConversation ? `Conversation history:
+  const systemBlock = normalized.filter((message) => message.role === "system" && message.content).map((message) => message.content).join("\n\n");
+  const systemPrefix = systemBlock ? `System instructions:
+${systemBlock}
+
+` : "";
+  const userText = systemPrefix + (priorConversation ? `Conversation history:
 ${priorConversation}
 
 Current user message:
-${latestUserText}` : latestUserText;
+${latestUserText}` : latestUserText);
   const userMessage = encodeUserMessage(userText, requestId, 1);
   const userAction = concatBytes([
     bytesField(1, userMessage),
@@ -7463,7 +7468,7 @@ function resolveCursorAccessToken(options = {}) {
 }
 function cursorHeaders(endpoint2, token, requestId, env) {
   const clientVersion = env.DOCKYARD_CURSOR_CLIENT_VERSION ?? `cli-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10).replace(/-/g, ".")}-agent-host`;
-  const clientKey = randomBytes2(32).toString("hex");
+  const clientKey = createHash8("sha256").update(`cursor-client-key:${token}`).digest("hex");
   return {
     ":method": "POST",
     ":path": `${endpoint2.pathname}${endpoint2.search}`,
@@ -7652,7 +7657,7 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
         const idleForMs = Date.now() - lastActivityAt;
         if (idleForMs > idleTimeoutMs) {
           cursorDebug(`${sid} IDLE-TIMEOUT ${Math.round(idleForMs / 1e3)}s without server bytes`);
-          queue.fail(nativeProviderError(PROVIDER_ID8, `Cursor connection idle for ${Math.round(idleForMs / 1e3)}s`, { code: "CURSOR_IDLE_TIMEOUT" }));
+          queue.fail(nativeProviderError(PROVIDER_ID8, `Cursor connection idle for ${Math.round(idleForMs / 1e3)}s (timed out waiting for server bytes)`, { code: "CURSOR_IDLE_TIMEOUT" }));
           return;
         }
         if (!stream || stream.destroyed || stream.closed) return;

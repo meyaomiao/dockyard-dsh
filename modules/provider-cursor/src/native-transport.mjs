@@ -128,7 +128,9 @@ export function resolveCursorAccessToken(options = {}) {
 function cursorHeaders(endpoint, token, requestId, env) {
   const clientVersion = env.DOCKYARD_CURSOR_CLIENT_VERSION
     ?? `cli-${new Date().toISOString().slice(0, 10).replace(/-/g, ".")}-agent-host`;
-  const clientKey = randomBytes(32).toString("hex");
+  // 稳定的 client key（按 token 派生）：官方客户端用稳定标识，每请求随机的
+  // key 等于自报家门"这是脚本"，容易被边缘风控限流/静默丢弃。
+  const clientKey = createHash("sha256").update(`cursor-client-key:${token}`).digest("hex");
   return {
     ":method": "POST",
     ":path": `${endpoint.pathname}${endpoint.search}`,
@@ -316,7 +318,7 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
         const idleForMs = Date.now() - lastActivityAt;
         if (idleForMs > idleTimeoutMs) {
           cursorDebug(`${sid} IDLE-TIMEOUT ${Math.round(idleForMs / 1000)}s without server bytes`);
-          queue.fail(nativeProviderError(PROVIDER_ID, `Cursor connection idle for ${Math.round(idleForMs / 1000)}s`, { code: "CURSOR_IDLE_TIMEOUT" }));
+          queue.fail(nativeProviderError(PROVIDER_ID, `Cursor connection idle for ${Math.round(idleForMs / 1000)}s (timed out waiting for server bytes)`, { code: "CURSOR_IDLE_TIMEOUT" }));
           return;
         }
         if (!stream || stream.destroyed || stream.closed) return;

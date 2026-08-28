@@ -77,6 +77,23 @@ async function collect(executor) {
   return chunks;
 }
 
+test("agent request carries the system prompt in the inlined user text", () => {
+  // 置空 conversation state 后，system 消息只能靠 userText 内联携带
+  const encoded = PROTOCOL.encodeAgentRunRequest({
+    messages: [
+      { role: "system", content: "You are TESTSYS-7f3, follow the rules." },
+      { role: "user", content: "hello" },
+    ],
+    model: "composer-2.5", requestId: "req-sys", conversationId: "req-sys", tools: [], timeZone: "Asia/Shanghai"
+  });
+  const run = PROTOCOL.decodeProtoFields(encoded.frame.slice(5)).find((f) => f.field === 1).value;
+  const action = PROTOCOL.decodeProtoFields(run).find((f) => f.field === 2).value;
+  const userMessage = PROTOCOL.decodeProtoFields(action).find((f) => f.field === 1).value;
+  const text = Buffer.from(PROTOCOL.decodeProtoFields(userMessage).find((f) => f.field === 1).value).toString("utf8");
+  assert.ok(text.includes("You are TESTSYS-7f3"), "system prompt must be inlined into user text");
+  assert.ok(text.includes("hello"), "current user message must be present");
+});
+
 test("executor halves messages and retries when the server sends a truncated flag leftover", async () => {
   const writes = [];
   const http2 = createFakeHttp2([

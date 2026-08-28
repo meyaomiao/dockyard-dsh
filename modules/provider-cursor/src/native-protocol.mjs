@@ -238,9 +238,16 @@ export function encodeAgentRunRequest({
       .map((message) => `${message.role === "assistant" ? "Assistant" : "User"}: ${message.content}`)
       .join("\n\n")
     : "";
-  const userText = priorConversation
+  // 系统提示必须随行：置空 conversation state 后 roots 不再携带 system 消息，
+  // 而 priorConversation 一直显式排除 system —— 不拼进来模型就收不到任何指令。
+  const systemBlock = normalized
+    .filter((message) => message.role === "system" && message.content)
+    .map((message) => message.content)
+    .join("\n\n");
+  const systemPrefix = systemBlock ? `System instructions:\n${systemBlock}\n\n` : "";
+  const userText = systemPrefix + (priorConversation
     ? `Conversation history:\n${priorConversation}\n\nCurrent user message:\n${latestUserText}`
-    : latestUserText;
+    : latestUserText);
   const userMessage = encodeUserMessage(userText, requestId, 1);
   const userAction = concatBytes([
     bytesField(1, userMessage),
