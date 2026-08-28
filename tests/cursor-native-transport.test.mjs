@@ -1,9 +1,146 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 
+const PROTOCOL = await import("../modules/provider-cursor/src/native-protocol.mjs");
+const { createCursorNativeExecutor } = await import("../modules/provider-cursor/src/native-transport.mjs");
+const { decodeCursorTruncateFlag } = PROTOCOL;
 
-test("cursor truncate flag frame is recognized and halving retry recovers", async () => {
-  const { decodeCursorTruncateFlag } = await import("../modules/provider-cursor/src/native-protocol.mjs");
+test("cursor truncate flag frame is recognized", () => {
   assert.equal(decodeCursorTruncateFlag(Buffer.from("000000000f0a0d0a0b0a097472756e63617465", "hex")), true);
   assert.equal(decodeCursorTruncateFlag(Buffer.from("0000000004deadbeef", "hex")), false);
+});
+
+// ---- fake http2：第 N 次尝试由 handlers[N] 同步往 stream 上推帧 ----
+function createFakeHttp2(handlers, writes) {
+  let attempt = 0;
+  return {
+    constants: {},
+    attempts: () => attempt,
+    connect() {
+      const session = new EventEmitter();
+      session.closed = false;
+      session.destroyed = false;
+      session.close = () => { session.closed = true; };
+      session.request = () => {
+        const handler = handlers[Math.min(attempt, handlers.length - 1)];
+        attempt += 1;
+        const stream = new EventEmitter();
+        stream.destroyed = false;
+        stream.closed = false;
+        stream.write = (chunk) => { writes.push(Buffer.from(chunk)); return true; };
+        stream.close = () => { stream.closed = true; };
+        stream.destroy = () => {};
+        stream.end = () => {};
+        queueMicrotask(() => handler(stream, attempt));
+        return stream;
+      };
+      return session;
+    },
+  };
+}
+
+const OK_RESPONSE = { ":status": 200, "content-type": "application/connect+proto" };
+const TRUNCATE_LEFTOVER = Buffer.from("000000000f0a0d0a0b0a097472756e63617465", "hex");
+
+function textFrame(text) {
+  // decodeCursorText 需要 message.1 -> interaction.1 -> update.1(string)
+  return PROTOCOL.frameConnectMessage(
+    PROTOCOL.bytesField(1, PROTOCOL.bytesField(1, PROTOCOL.stringField(1, text))),
+  );
+}
+
+function completeTrailer() {
+  // flags=2 的 end-stream 帧，payload "{}" 无 error => 服务端视角正常完成
+  return PROTOCOL.frameConnectMessage(Buffer.from("{}"), 2);
+}
+
+const MESSAGES = [
+  { role: "user", content: "x".repeat(400) },
+  { role: "assistant", content: "y" },
+  { role: "user", content: "question" },
+];
+
+function createExecutor(http2Module) {
+  return createCursorNativeExecutor({
+    endpoint: "https://agent.api5.cursor.sh/agent.v1.AgentService/Run",
+    tokenResolver: async () => ({ token: "test-token" }),
+    http2Module,
+  });
+}
+
+async function collect(executor) {
+  const chunks = [];
+  for await (const chunk of executor({ request: { messages: MESSAGES, model: "composer-2.5" }, invocation: {}, context: {} })) {
+    chunks.push(chunk);
+  }
+  return chunks;
+}
+
+test("executor halves messages and retries when the server sends a truncated flag leftover", async () => {
+  const writes = [];
+  const http2 = createFakeHttp2([
+    (stream) => {
+      // 第一次：只吐 19B 的 truncate 残帧（声明 15B payload、实际 14B），随后关流。
+      // 修复前：残帧永远进不了帧循环 => CURSOR_INCOMPLETE_RESPONSE 且不对半重试。
+      stream.emit("response", OK_RESPONSE);
+      stream.emit("data", TRUNCATE_LEFTOVER);
+      stream.emit("end");
+    },
+    (stream) => {
+      // 第二次：历史已对半，正常完成
+      stream.emit("response", OK_RESPONSE);
+      stream.emit("data", textFrame("recovered"));
+      stream.emit("data", completeTrailer());
+      stream.emit("end");
+    },
+  ], writes);
+  const chunks = await collect(createExecutor(http2));
+  assert.equal(http2.attempts(), 2, "truncate must trigger exactly one retry");
+  assert.ok(writes.length >= 2, "both attempts must send a request frame");
+  assert.ok(writes[0].length > writes[1].length, "halved history must produce a smaller request frame");
+  const text = chunks.filter((c) => c.type === "text-delta").map((c) => c.text).join("");
+  assert.equal(text, "recovered");
+  assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
+});
+
+test("executor retries transient stream errors (ETIMEDOUT) before any content is forwarded", async () => {
+  const writes = [];
+  const http2 = createFakeHttp2([
+    (stream) => {
+      stream.emit("response", OK_RESPONSE);
+      stream.emit("error", Object.assign(new Error("read ETIMEDOUT"), { code: "ETIMEDOUT" }));
+    },
+    (stream) => {
+      stream.emit("response", OK_RESPONSE);
+      stream.emit("data", textFrame("ok"));
+      stream.emit("data", completeTrailer());
+      stream.emit("end");
+    },
+  ], writes);
+  const chunks = await collect(createExecutor(http2));
+  assert.equal(http2.attempts(), 2, "transient stream error must be retried once");
+  const text = chunks.filter((c) => c.type === "text-delta").map((c) => c.text).join("");
+  assert.equal(text, "ok");
+  assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
+});
+
+test("executor surfaces the error after exhausting retries (no infinite loop)", async () => {
+  const writes = [];
+  const http2 = createFakeHttp2([
+    (stream) => {
+      stream.emit("response", OK_RESPONSE);
+      stream.emit("data", TRUNCATE_LEFTOVER);
+      stream.emit("end");
+    },
+  ], writes);
+  const executor = createExecutor(http2);
+  await assert.rejects(
+    () => collect(executor),
+    (error) => {
+      // 每次都对半，3 次尝试用尽后把最后一个错误抛出去
+      return error?.code === "CURSOR_TRUNCATE_REQUESTED" || error?.code === "CURSOR_INCOMPLETE_RESPONSE";
+    },
+  );
+  assert.equal(http2.attempts(), 3);
 });

@@ -7211,13 +7211,6 @@ function encodeAssistantStep(text3) {
   const conversationStep = bytesField(1, assistantMessage);
   return conversationStep;
 }
-function encodeConversationTurn(userMessageId, stepIds, requestId) {
-  return concatBytes([
-    bytesField(1, userMessageId),
-    ...stepIds.map((id) => bytesField(2, id)),
-    ...requestId ? [stringField(3, requestId)] : []
-  ]);
-}
 function encodeConversationState(messages, blobStore, requestId) {
   const roots = [];
   const turns = [];
@@ -7243,11 +7236,6 @@ ${message.content}`;
     roots.push(jsonBlob(blobStore, { role: "user", content: [{ type: "text", text: resultText }] }));
     turnRecords.at(-1)?.steps.push(putBlob(blobStore, encodeAssistantStep(resultText)));
   }
-  // turns omitted (fix 2026-08-28): the server depth-decodes turn blobs with its own
-  // schema; our guessed field layout derails its decoder => "illegal tag: field no N
-  // wire type 6/7", "cant skip wire type 4", "premature EOF". Full history is already
-  // inlined into the current user message, so turns are not required. Verified live:
-  // roots-only completes where roots+turns fails (same payload, same token).
   return concatBytes([
     ...roots.map((id) => bytesField(1, id))
   ]);
@@ -7412,7 +7400,7 @@ function decodeCursorKvRequest(message) {
 function decodeCursorTruncateFlag(payload) {
   try {
     if (!payload || payload.length < 4) return false;
-    const needle = Buffer.from("truncate");
+    const needle = Buffer.from("0a0d0a0b0a097472756e63617465", "hex");
     return Buffer.from(payload).includes(needle);
   } catch {
     return false;
@@ -7604,9 +7592,14 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
       stream?.close(http2Module.constants?.NGHTTP2_CANCEL);
       session.close();
     };
+    const wrapTransportError = (error) => {
+      const wrapped = nativeProviderError(PROVIDER_ID8, error?.message ?? String(error), { code: error?.code });
+      wrapped.cause = error;
+      return wrapped;
+    };
     session.once("error", (error) => {
       cursorDebug(`${sid} SESSION-ERROR ${error.message} code=${error.code ?? ""}`);
-      queue.fail(error);
+      queue.fail(wrapTransportError(error));
     });
     try {
       stream = session.request(cursorHeaders(url, token, requestId, context.env ?? process.env));
@@ -7668,6 +7661,10 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
         }
       });
       stream.once("end", () => {
+        if (!completed && truncated === null && responseBuffer.byteLength > 0 && responseBuffer.byteLength < 128 && decodeCursorTruncateFlag(responseBuffer)) {
+          truncated = true;
+          cursorDebug(`${sid} TRUNCATE-FLAG leftover ${responseBuffer.byteLength}B \u2014 server asks to shorten conversation`);
+        }
         if (truncated) {
           queue.fail(nativeProviderError(PROVIDER_ID8, "Cursor requested conversation truncation", { code: "CURSOR_TRUNCATE_REQUESTED" }));
         }
@@ -7684,7 +7681,7 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
       });
       stream.once("error", (error) => {
         cursorDebug(`${sid} STREAM-ERROR ${error.message} code=${error.code ?? ""}`);
-        queue.fail(error);
+        queue.fail(wrapTransportError(error));
       });
       stream.write(Buffer.from(encoded.frame));
       heartbeat = setInterval(() => {
@@ -7739,7 +7736,9 @@ function createCursorNativeExecutor({
   http2Module = http2
 } = {}) {
   const safeEndpoint = validateNativeEndpoint(endpoint2, { providerId: PROVIDER_ID8 });
-  const executor = async ({ request = {}, invocation, context = {} } = {}) => {
+  const RETRYABLE_CODES = /* @__PURE__ */ new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED"]);
+  const RETRYABLE_STREAM_CODES = /* @__PURE__ */ new Set(["ETIMEDOUT", "ECONNRESET", "EPIPE", "ERR_HTTP2_STREAM_CANCEL"]);
+  const executor = async function* ({ request = {}, invocation, context = {} } = {}) {
     let credential = null;
     if (context.secretStore) {
       const ref = invocation?.auth?.credentialRef ?? invocation?.account?.auth?.credentialRef ?? invocation?.account?.credentialRef;
@@ -7761,28 +7760,35 @@ function createCursorNativeExecutor({
         throw error;
       }
     }
-    const RETRYABLE_CODES = /* @__PURE__ */ new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED"]);
     let lastError = null;
     let messages = request.messages;
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      let emittedText = false;
+      let pendingStart = null;
+      let forwarded = false;
       try {
-        const stream = streamCursor({ endpoint: safeEndpoint, token: auth.token, request: { ...request, messages }, context, http2Module });
-        async function* guard() {
-          for await (const chunk of stream) {
-            if (chunk?.type === "text-delta") emittedText = true;
-            yield chunk;
+        for await (const chunk of streamCursor({ endpoint: safeEndpoint, token: auth.token, request: { ...request, messages }, context, http2Module })) {
+          if (chunk?.type === "block-start" && !forwarded) {
+            pendingStart = chunk;
+            continue;
           }
+          forwarded = true;
+          if (pendingStart) {
+            yield pendingStart;
+            pendingStart = null;
+          }
+          yield chunk;
         }
-        return guard();
+        return;
       } catch (error) {
         lastError = error;
-        const retriable = RETRYABLE_CODES.has(error?.code ?? "") && !(error?.status >= 400);
-        if (error?.code === "CURSOR_TRUNCATE_REQUESTED" && Array.isArray(messages) && messages.length > 1) {
+        if (error?.status === 401 || error?.status === 403) error.authExpired = error.status === 401;
+        const code = error?.code ?? "";
+        const retriable = (RETRYABLE_CODES.has(code) || RETRYABLE_STREAM_CODES.has(code)) && !(error?.status >= 400);
+        if (code === "CURSOR_TRUNCATE_REQUESTED" && !forwarded && Array.isArray(messages) && messages.length > 1) {
           messages = messages.slice(Math.ceil(messages.length / 2));
           continue;
         }
-        if (attempt === 0 && retriable && !emittedText) continue;
+        if (retriable && !forwarded) continue;
         throw error;
       }
     }

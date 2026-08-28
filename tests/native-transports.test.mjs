@@ -394,7 +394,7 @@ test("Cursor native transport preserves text across split Connect frames", async
   assert.equal(chunks.at(-1).type, "finish");
 });
 
-test("Cursor native transport rejects a truncated Connect frame", async () => {
+test("Cursor native transport reports CURSOR_TRUNCATE_REQUESTED for a truncated Connect frame", async () => {
   const frame = frameConnectMessage(bytesField(1, bytesField(1, stringField(1, "truncated"))));
   const truncated = frame.slice(0, frame.length - 1);
   const fakeHttp2 = {
@@ -430,8 +430,9 @@ test("Cursor native transport rejects a truncated Connect frame", async () => {
       request: { model: "composer-2.5", requestId: "request-truncated", messages: [{ role: "user", content: "Hi" }] },
     })),
     (error) => {
-      assert.equal(error.code, "CURSOR_INCOMPLETE_RESPONSE");
-      assert.equal(error.cursorDiagnostics.at(-1).incomplete, true);
+      // 残帧的字节模式（0a0d0a0b0a09"truncated"）与服务端 truncate 标志同构，
+      // 现在会先被识别为 CURSOR_TRUNCATE_REQUESTED（executor 对半重试）。
+      assert.equal(error.code, "CURSOR_TRUNCATE_REQUESTED");
       return true;
     },
   );

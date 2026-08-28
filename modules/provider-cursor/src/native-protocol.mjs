@@ -403,7 +403,9 @@ export function decodeCursorKvRequest(message) {
 export function decodeCursorTruncateFlag(payload) {
   try {
     if (!payload || payload.length < 4) return false;
-    const needle = Buffer.from("truncate");
+    // 结构化识别：field1(13){field1(11){field1(9)"truncate"}} 的 protobuf 前缀。
+    // 裸搜 "truncate" 会误伤正文里碰巧含该词的普通残帧。
+    const needle = Buffer.from("0a0d0a0b0a097472756e63617465", "hex");
     return Buffer.from(payload).includes(needle);
   } catch {
     return false;

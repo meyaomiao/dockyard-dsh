@@ -212,7 +212,14 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
       stream?.close(http2Module.constants?.NGHTTP2_CANCEL);
       session.close();
     };
-    session.once("error", (error) => { cursorDebug(`${sid} SESSION-ERROR ${error.message} code=${error.code ?? ""}`); queue.fail(error); });
+    const wrapTransportError = (error) => {
+      // 保留原始 code（ETIMEDOUT/ECONNRESET/...），让 executor 重试判定和
+      // harness 的失败分类都能认出来；原始错误挂在 cause 上不丢信息。
+      const wrapped = nativeProviderError(PROVIDER_ID, error?.message ?? String(error), { code: error?.code });
+      wrapped.cause = error;
+      return wrapped;
+    };
+    session.once("error", (error) => { cursorDebug(`${sid} SESSION-ERROR ${error.message} code=${error.code ?? ""}`); queue.fail(wrapTransportError(error)); });
     try {
       stream = session.request(cursorHeaders(url, token, requestId, context.env ?? process.env));
       stream.once("response", (headers) => {
@@ -273,6 +280,13 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
         }
       });
       stream.once("end", () => {
+        // 服务端发完 truncate 标志会立刻关流，标志帧本身常被拦腰截断
+        // （19B leftover：声明 15B payload、实际只有 14B），decodeConnectFrames
+        // 永远不会把它当完整帧吐出来 —— 所以在 end 时对残包再识别一次。
+        if (!completed && truncated === null && responseBuffer.byteLength > 0 && responseBuffer.byteLength < 128 && decodeCursorTruncateFlag(responseBuffer)) {
+          truncated = true;
+          cursorDebug(`${sid} TRUNCATE-FLAG leftover ${responseBuffer.byteLength}B — server asks to shorten conversation`);
+        }
         if (truncated) {
           queue.fail(nativeProviderError(PROVIDER_ID, "Cursor requested conversation truncation", { code: "CURSOR_TRUNCATE_REQUESTED" }));
         }
@@ -287,7 +301,7 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
           queue.close();
         }
       });
-      stream.once("error", (error) => { cursorDebug(`${sid} STREAM-ERROR ${error.message} code=${error.code ?? ""}`); queue.fail(error); });
+      stream.once("error", (error) => { cursorDebug(`${sid} STREAM-ERROR ${error.message} code=${error.code ?? ""}`); queue.fail(wrapTransportError(error)); });
       stream.write(Buffer.from(encoded.frame));
       heartbeat = setInterval(() => {
         if (!stream || stream.destroyed || stream.closed) return;
@@ -340,7 +354,12 @@ export function createCursorNativeExecutor({
   http2Module = http2,
 } = {}) {
   const safeEndpoint = validateNativeEndpoint(endpoint, { providerId: PROVIDER_ID });
-  const executor = async ({ request = {}, invocation, context = {} } = {}) => {
+  // 上游偶发截断/断流。重试循环必须在 executor 里真正消费流：
+  // streamCursor 是惰性 async generator，错误在消费阶段才抛，
+  // 旧写法 return guard() 让外层 catch 永远接不到 → 重试是死代码。
+  const RETRYABLE_CODES = new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED"]);
+  const RETRYABLE_STREAM_CODES = new Set(["ETIMEDOUT", "ECONNRESET", "EPIPE", "ERR_HTTP2_STREAM_CANCEL"]);
+  const executor = async function* ({ request = {}, invocation, context = {} } = {}) {
     let credential = null;
     if (context.secretStore) {
       const ref = invocation?.auth?.credentialRef ?? invocation?.account?.auth?.credentialRef ?? invocation?.account?.credentialRef;
@@ -362,37 +381,45 @@ export function createCursorNativeExecutor({
         throw error;
       }
     }
-    // 上游偶发把流拦腰截断（premature EOF / incomplete Connect frame）。
-    // 若本次还没吐出任何文本，原样重试一次；已产出内容则不重试避免重复输出。
-    const RETRYABLE_CODES = new Set(["CURSOR_INCOMPLETE_RESPONSE", "UNKNOWN", "CURSOR_TRUNCATE_REQUESTED"]);
     let lastError = null;
     let messages = request.messages;
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      let emittedText = false;
+      // block-start 先扣住不下发：本次尝试若还没产出内容就失败，
+      // 重试时直接丢弃，避免下游收到重复的 block-start。
+      let pendingStart = null;
+      let forwarded = false;
       try {
-        const stream = streamCursor({ endpoint: safeEndpoint, token: auth.token, request: { ...request, messages }, context, http2Module });
-        async function* guard() {
-          for await (const chunk of stream) {
-            if (chunk?.type === "text-delta") emittedText = true;
-            yield chunk;
+        for await (const chunk of streamCursor({ endpoint: safeEndpoint, token: auth.token, request: { ...request, messages }, context, http2Module })) {
+          if (chunk?.type === "block-start" && !forwarded) {
+            pendingStart = chunk;
+            continue;
           }
+          forwarded = true;
+          if (pendingStart) {
+            yield pendingStart;
+            pendingStart = null;
+          }
+          yield chunk;
         }
-        return guard();
+        return;
       } catch (error) {
         lastError = error;
-        const retriable = RETRYABLE_CODES.has(error?.code ?? "") && !(error?.status >= 400);
-        // 服务端要求截断：无论是否已产出文本都重试，并把历史对半减掉
-        if (error?.code === "CURSOR_TRUNCATE_REQUESTED" && Array.isArray(messages) && messages.length > 1) {
+        if (error?.status === 401 || error?.status === 403) error.authExpired = error.status === 401;
+        const code = error?.code ?? "";
+        const retriable = (RETRYABLE_CODES.has(code) || RETRYABLE_STREAM_CODES.has(code)) && !(error?.status >= 400);
+        // 服务端要求截断：把历史对半减掉再重试；已向下转发过内容则不能重试（会重复输出）
+        if (code === "CURSOR_TRUNCATE_REQUESTED" && !forwarded && Array.isArray(messages) && messages.length > 1) {
           messages = messages.slice(Math.ceil(messages.length / 2));
           continue;
         }
-        if (attempt === 0 && retriable && !emittedText) continue;
+        if (retriable && !forwarded) continue;
         throw error;
       }
     }
     throw lastError;
   };
-  executor.nativeTransport = "cursor-connect-agent-service";
+
+executor.nativeTransport = "cursor-connect-agent-service";
   return executor;
 }
 
