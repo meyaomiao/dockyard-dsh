@@ -197,10 +197,13 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
     };
     let completed = false;
     let truncated = null;
-    // 服务端活跃时间：只有对端来的字节（响应头/数据帧）才算数。
-    // 健康的 turn 每几秒就有帧流动；连续 IDLE_TIMEOUT_MS 一个字节都没有
-    // 说明被服务端黑洞了，主动断掉交给 executor 重试，别让用户干等 4-9 分钟。
-    let lastActivityAt = Date.now();
+    // 进度超时：只认“有用的”对端活动（响应头、助手文本、KV、完成帧）。
+    // 服务端会周期性推 1.8 心跳/诊断帧，如果把任意字节都当活跃，Deep diving
+    // 会被续命十几分钟却永远解不出文本（2026-08-28 22:51 现场：STATUS 200
+    // 后持续收帧、diag 累加、无 text-delta）。
+    let lastProgressAt = Date.now();
+    let producedText = false;
+    let loggedDiag = 0;
     const idleTimeoutMs = Number(process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS ?? 60_000);
     let cleaned = false;
     let heartbeat;
@@ -231,12 +234,11 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
       stream = session.request(cursorHeaders(url, token, requestId, context.env ?? process.env));
       stream.once("response", (headers) => {
         responseStatus = Number(headers[":status"] ?? 0);
-        lastActivityAt = Date.now();
+        lastProgressAt = Date.now();
         cursorDebug(`${sid} STATUS ${responseStatus} ct=${headers["content-type"] ?? "?"}`);
         if (responseStatus >= 400) queue.fail(cursorStatusError(responseStatus));
       });
       stream.on("data", (chunk) => {
-        lastActivityAt = Date.now();
         const incoming = new Uint8Array(chunk);
         const merged = new Uint8Array(responseBuffer.byteLength + incoming.byteLength);
         merged.set(responseBuffer);
@@ -246,6 +248,7 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
         for (const frame of decoded.frames) {
           if (process.env.DOCKYARD_CURSOR_TRACE === "1") cursorDebug(`${sid} FRAME flags=${frame.flags} len=${frame.payload.length}`);
           if ((frame.flags & 0x02) !== 0) {
+            lastProgressAt = Date.now();
             const trailer = decodeCursorConnectTrailer(frame.payload);
             if (trailer) {
               cursorDebug(`${sid} TRAILER-ERROR code=${trailer.code} msg=${trailer.message}`);
@@ -271,6 +274,7 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
           }
           const kv = decodeCursorKvRequest(frame.payload);
           if (kv) {
+            lastProgressAt = Date.now();
             try {
               stream?.write(Buffer.from(encodeKvResponse(kv, encoded.blobs)));
             } catch (error) {
@@ -280,9 +284,23 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
           }
           const text = decodeCursorText(frame.payload);
           const turnComplete = cursorTurnComplete(frame.payload);
-          if (text) queue.push({ type: "text", text });
-          if (!text) responseDiagnostics.push(cursorFrameMetadata(frame.payload, frame.flags));
+          if (text) {
+            producedText = true;
+            lastProgressAt = Date.now();
+            queue.push({ type: "text", text });
+          } else {
+            const meta = cursorFrameMetadata(frame.payload, frame.flags);
+            responseDiagnostics.push(meta);
+            if (loggedDiag < 8) {
+              loggedDiag += 1;
+              const paths = (meta.fieldPaths ?? []).slice(0, 8)
+                .map((field) => `${field.path}:wt${field.wireType}`)
+                .join(" ");
+              cursorDebug(`${sid} DIAG flags=${frame.flags} len=${frame.payload.length} paths=${paths}`);
+            }
+          }
           if (turnComplete) {
+            lastProgressAt = Date.now();
             completed = true;
             queue.push({ type: "complete" });
           }
@@ -315,10 +333,10 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
       const idleTickMs = Math.max(250, Math.min(5_000, Math.floor(idleTimeoutMs / 2)));
       heartbeat = setInterval(() => {
         if (completed) return;
-        const idleForMs = Date.now() - lastActivityAt;
+        const idleForMs = Date.now() - lastProgressAt;
         if (idleForMs > idleTimeoutMs) {
-          cursorDebug(`${sid} IDLE-TIMEOUT ${Math.round(idleForMs / 1000)}s without server bytes`);
-          queue.fail(nativeProviderError(PROVIDER_ID, `Cursor connection idle for ${Math.round(idleForMs / 1000)}s (timed out waiting for server bytes)`, { code: "CURSOR_IDLE_TIMEOUT" }));
+          cursorDebug(`${sid} PROGRESS-TIMEOUT ${Math.round(idleForMs / 1000)}s without text/KV/complete producedText=${producedText} diag=${responseDiagnostics.length}`);
+          queue.fail(nativeProviderError(PROVIDER_ID, `Cursor produced no assistant text for ${Math.round(idleForMs / 1000)}s (timed out waiting for progress)`, { code: "CURSOR_IDLE_TIMEOUT" }));
           return;
         }
         if (!stream || stream.destroyed || stream.closed) return;

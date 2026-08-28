@@ -55,6 +55,13 @@ function completeTrailer() {
   return PROTOCOL.frameConnectMessage(Buffer.from("{}"), 2);
 }
 
+function heartbeatDiagFrame() {
+  // 线上 F7：1.8.1 心跳/诊断帧。有字节但没有助手文本，不能续命进度超时。
+  return PROTOCOL.frameConnectMessage(
+    PROTOCOL.bytesField(1, PROTOCOL.bytesField(8, PROTOCOL.varintField(1, 0))),
+  );
+}
+
 const MESSAGES = [
   { role: "user", content: "x".repeat(400) },
   { role: "assistant", content: "y" },
@@ -141,6 +148,41 @@ test("executor fails over to a retry when the server goes byte-silent (idle time
     assert.equal(http2.attempts(), 2, "byte-silent stream must be retried");
     const text = chunks.filter((c) => c.type === "text-delta").map((c) => c.text).join("");
     assert.equal(text, "late");
+    assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
+  } finally {
+    delete process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS;
+  }
+});
+
+test("executor fails over when the server only sends diagnostic heartbeats", async () => {
+  process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS = "300";
+  try {
+    const writes = [];
+    const http2 = createFakeHttp2([
+      (stream) => {
+        stream.emit("response", OK_RESPONSE);
+        const tick = setInterval(() => {
+          if (stream.closed || stream.destroyed) {
+            clearInterval(tick);
+            return;
+          }
+          stream.emit("data", heartbeatDiagFrame());
+        }, 80);
+        const stop = () => clearInterval(tick);
+        const originalClose = stream.close;
+        stream.close = (...args) => { stop(); return originalClose?.(...args); };
+      },
+      (stream) => {
+        stream.emit("response", OK_RESPONSE);
+        stream.emit("data", textFrame("pong"));
+        stream.emit("data", completeTrailer());
+        stream.emit("end");
+      },
+    ], writes);
+    const chunks = await collect(createExecutor(http2));
+    assert.equal(http2.attempts(), 2, "heartbeat-only stream must be retried");
+    const text = chunks.filter((c) => c.type === "text-delta").map((c) => c.text).join("");
+    assert.equal(text, "pong");
     assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
   } finally {
     delete process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS;
