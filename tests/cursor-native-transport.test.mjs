@@ -151,6 +151,36 @@ test("executor retries transient stream errors (ETIMEDOUT) before any content is
   assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
 });
 
+test("executor regenerates once when a forwarded stream dies mid-turn (idle timeout)", async () => {
+  process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS = "300";
+  try {
+    const writes = [];
+    const http2 = createFakeHttp2([
+      (stream) => {
+        // 第一次：吐了一半内容后服务端停滞（15:20/16:17 两次事故的形态）
+        stream.emit("response", OK_RESPONSE);
+        stream.emit("data", textFrame("partial "));
+        setTimeout(() => stream.emit("end"), 500);
+      },
+      (stream) => {
+        // 第二次：换个健康实例，完整跑完
+        stream.emit("response", OK_RESPONSE);
+        stream.emit("data", textFrame("partial and full answer"));
+        stream.emit("data", completeTrailer());
+        stream.emit("end");
+      },
+    ], writes);
+    const chunks = await collect(createExecutor(http2));
+    assert.equal(http2.attempts(), 2, "mid-turn stall must get exactly one regeneration");
+    const text = chunks.filter((c) => c.type === "text-delta").map((c) => c.text).join("");
+    assert.ok(text.includes("partial "), "forwarded partial text stays");
+    assert.ok(text.includes("full answer"), "regenerated attempt completes the turn");
+    assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
+  } finally {
+    delete process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS;
+  }
+});
+
 test("executor surfaces the error after exhausting retries (no infinite loop)", async () => {
   const writes = [];
   const http2 = createFakeHttp2([

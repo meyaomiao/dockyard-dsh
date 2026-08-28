@@ -48,6 +48,8 @@ export function harnessFailureCode(error) {
   const numericStatus = Number(error.upstreamStatus ?? error.status);
 
   if (/\btime'?d?\s*-?\s*out\b|\betimedout\b|\betimeout\b/.test(text)) return "TIMEOUT";
+  // Cursor native transport idle watchdog: "Cursor connection idle for 63s"
+  if (/\bconnection idle\b|\bidle timeout\b|\bidle for\b/.test(text)) return "TIMEOUT";
 
   if (numericStatus === 429 || numericStatus === "429" || /\b429\b|rate.?limit/.test(text)) return "RATE_LIMIT";
 

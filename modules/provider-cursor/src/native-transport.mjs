@@ -398,6 +398,7 @@ export function createCursorNativeExecutor({
     }
     let lastError = null;
     let messages = request.messages;
+    let retriedAfterForward = false;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       // block-start 先扣住不下发：本次尝试若还没产出内容就失败，
       // 重试时直接丢弃，避免下游收到重复的 block-start。
@@ -422,19 +423,26 @@ export function createCursorNativeExecutor({
         if (error?.status === 401 || error?.status === 403) error.authExpired = error.status === 401;
         const code = error?.code ?? "";
         const retriable = (RETRYABLE_CODES.has(code) || RETRYABLE_STREAM_CODES.has(code)) && !(error?.status >= 400);
-        // 服务端要求截断：把历史对半减掉再重试；已向下转发过内容则不能重试（会重复输出）
+        // 服务端要求截断：把历史对半减掉再重试
         if (code === "CURSOR_TRUNCATE_REQUESTED" && !forwarded && Array.isArray(messages) && messages.length > 1) {
           messages = messages.slice(Math.ceil(messages.length / 2));
           continue;
         }
         if (retriable && !forwarded) continue;
+        // 已转发过内容后撞上瞬断（idle/断流/空收尾）：线上实测同一内容换个
+        // 后端实例几秒就能跑完（2026-08-28 15:20/16:17 两次事故），允许重新
+        // 生成一次——重复半句话好过整轮报废。只放宽这一次，防止循环复读。
+        if (retriable && forwarded && !retriedAfterForward) {
+          retriedAfterForward = true;
+          continue;
+        }
         throw error;
       }
     }
     throw lastError;
   };
 
-executor.nativeTransport = "cursor-connect-agent-service";
+  executor.nativeTransport = "cursor-connect-agent-service";
   return executor;
 }
 

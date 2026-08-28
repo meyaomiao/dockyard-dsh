@@ -943,6 +943,7 @@ function harnessFailureCode(error) {
   const text3 = errorText(error).toLowerCase();
   const numericStatus2 = Number(error.upstreamStatus ?? error.status);
   if (/\btime'?d?\s*-?\s*out\b|\betimedout\b|\betimeout\b/.test(text3)) return "TIMEOUT";
+  if (/\bconnection idle\b|\bidle timeout\b|\bidle for\b/.test(text3)) return "TIMEOUT";
   if (numericStatus2 === 429 || numericStatus2 === "429" || /\b429\b|rate.?limit/.test(text3)) return "RATE_LIMIT";
   if (/maximum prompt length|prompt(?: is)? too long|context (?:window )?(?:length|size)(?:\s+\w+){0,6}?(?:exceed|over|max)|too many tokens?\b|reduce the (?:length|number of)/.test(text3)) {
     return CONTEXT_WINDOW_EXCEEDED_CODE;
@@ -7774,6 +7775,7 @@ function createCursorNativeExecutor({
     }
     let lastError = null;
     let messages = request.messages;
+    let retriedAfterForward = false;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       let pendingStart = null;
       let forwarded = false;
@@ -7801,6 +7803,10 @@ function createCursorNativeExecutor({
           continue;
         }
         if (retriable && !forwarded) continue;
+        if (retriable && forwarded && !retriedAfterForward) {
+          retriedAfterForward = true;
+          continue;
+        }
         throw error;
       }
     }
