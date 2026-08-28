@@ -7674,6 +7674,7 @@ function streamCursor({ endpoint: endpoint2, token, request, context, http2Modul
       const idleTickMs = Math.max(250, Math.min(5e3, Math.floor(idleTimeoutMs / 2)));
       heartbeat = setInterval(() => {
         if (completed) return;
+        if (producedText) return;
         const idleForMs = Date.now() - lastProgressAt;
         if (idleForMs > idleTimeoutMs) {
           cursorDebug(`${sid} PROGRESS-TIMEOUT ${Math.round(idleForMs / 1e3)}s without text/KV/complete producedText=${producedText} diag=${responseDiagnostics.length}`);

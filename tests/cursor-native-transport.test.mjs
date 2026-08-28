@@ -197,6 +197,41 @@ test("executor fails over when the server only sends diagnostic heartbeats", asy
   }
 });
 
+test("progress timeout does not kill a stream after assistant text has started", async () => {
+  process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS = "250";
+  try {
+    const writes = [];
+    const http2 = createFakeHttp2([
+      (stream) => {
+        stream.emit("response", OK_RESPONSE);
+        stream.emit("data", textFrame("正在分析"));
+        const tick = setInterval(() => {
+          if (stream.closed || stream.destroyed) {
+            clearInterval(tick);
+            return;
+          }
+          stream.emit("data", heartbeatDiagFrame());
+        }, 60);
+        setTimeout(() => {
+          clearInterval(tick);
+          stream.emit("data", textFrame(" 完成。"));
+          stream.emit("data", completeTrailer());
+          stream.emit("end");
+        }, 700);
+        const originalClose = stream.close;
+        stream.close = (...args) => { clearInterval(tick); return originalClose?.(...args); };
+      },
+    ], writes);
+    const chunks = await collect(createExecutor(http2));
+    assert.equal(http2.attempts(), 1, "started text must not be progress-killed");
+    const text = chunks.filter((c) => c.type === "text-delta").map((c) => c.text).join("");
+    assert.equal(text, "正在分析 完成。");
+    assert.deepEqual(chunks.at(-1), { type: "finish", reason: { kind: "stop" } });
+  } finally {
+    delete process.env.DOCKYARD_CURSOR_IDLE_TIMEOUT_MS;
+  }
+});
+
 test("executor retries transient stream errors (ETIMEDOUT) before any content is forwarded", async () => {
   const writes = [];
   const http2 = createFakeHttp2([

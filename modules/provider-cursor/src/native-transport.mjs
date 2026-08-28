@@ -333,6 +333,10 @@ function streamCursor({ endpoint, token, request, context, http2Module = http2 }
       const idleTickMs = Math.max(250, Math.min(5_000, Math.floor(idleTimeoutMs / 2)));
       heartbeat = setInterval(() => {
         if (completed) return;
+        // 已经出过助手文本就不要再掐：Composer 分析/读文件时句子之间停 1–2 分钟很常见
+        // （2026-08-28 00:36 事故：producedText=true 后 64s 只有 1.8 心跳，被进度超时杀掉）。
+        // 无文本的 Deep diving 才用短超时换线。
+        if (producedText) return;
         const idleForMs = Date.now() - lastProgressAt;
         if (idleForMs > idleTimeoutMs) {
           cursorDebug(`${sid} PROGRESS-TIMEOUT ${Math.round(idleForMs / 1000)}s without text/KV/complete producedText=${producedText} diag=${responseDiagnostics.length}`);
