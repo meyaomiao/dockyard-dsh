@@ -9,6 +9,7 @@ import {
   translate as translateText,
 } from "./dockyard-locale.mjs";
 import { NativeKeyPoolController } from "./native-key-pool.mjs";
+import { selectPrimaryQuotaWindow, selectQuotaIndicator } from "./quota-display.mjs";
 
 const h = React.createElement;
 const {
@@ -46,12 +47,19 @@ button[role="menuitemradio"] [class$="_description"]{display:none!important}
 .dockyard-dsh-model-group-toggle .dockyard-dsh-model-group-chevron{margin-left:auto}
 section[data-dockyard-model-group-collapsed="true"]>[role="menuitemradio"]{display:none!important}
 .dockyard-dsh-trigger{display:inline-flex;align-items:center;gap:8px;max-width:260px;height:28px;padding:0 10px;border:0;border-radius:999px;color:var(--dsw-alias-label-secondary,#c7ccd5);background:transparent;cursor:pointer;font:500 13px/20px Inter,var(--dsw-font-family,sans-serif);white-space:nowrap}
+.dockyard-dsh-quota-trigger{min-width:58px;width:auto;max-width:128px;justify-content:center;gap:0;padding:0 6px}
+.dockyard-dsh-balance{display:inline-flex;align-items:center;min-height:20px;color:#79d6c8;font-size:12px;font-weight:600;line-height:20px;white-space:nowrap}
+.dockyard-dsh-balance[data-level=critical]{color:#ff8e7d}
+.dockyard-dsh-quota-meter{display:block;position:relative;width:48px;height:5px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.dockyard-dsh-quota-meter-fill{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#79d6c8,#b7a3ff);transition:width 220ms ease,background 220ms ease}
+.dockyard-dsh-quota-meter[data-level=warning] .dockyard-dsh-quota-meter-fill{background:linear-gradient(90deg,#f0c36a,#eaa96a)}
+.dockyard-dsh-quota-meter[data-level=critical] .dockyard-dsh-quota-meter-fill{background:linear-gradient(90deg,#ff8e7d,#e76b7c)}
+.dockyard-dsh-quota-meter[data-level=unknown] .dockyard-dsh-quota-meter-fill{width:100%!important;background:#89919d;opacity:.42}
+.dockyard-dsh-quota-meter[data-level=loading] .dockyard-dsh-quota-meter-fill{width:45%!important;background:#cbb7ff;animation:dockyard-dsh-quota-loading 1.1s ease-in-out infinite}
+@keyframes dockyard-dsh-quota-loading{0%,100%{opacity:.35;transform:translateX(-25%)}50%{opacity:1;transform:translateX(25%)}}
 .dockyard-dsh-trigger:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(255,255,255,.08));color:var(--dsw-alias-label-primary,#fff)}
 .dockyard-dsh-trigger:focus-visible{outline:2px solid var(--dsw-alias-border-l3,#8fa3c7);outline-offset:1px}
 .dockyard-dsh-trigger[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover,rgba(255,255,255,.08));color:var(--dsw-alias-label-primary,#fff)}
-.dockyard-dsh-add-trigger{display:inline-flex;align-items:center;justify-content:center;gap:3px;height:28px;margin-left:2px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16));border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary,#c7ccd5);cursor:pointer;font:500 12px/20px Inter,var(--dsw-font-family,sans-serif);white-space:nowrap}
-.dockyard-dsh-add-trigger:hover,.dockyard-dsh-add-trigger:focus-visible{border-color:rgba(121,214,200,.6);background:rgba(121,214,200,.09);color:var(--dsw-alias-label-primary,#fff)}
-.dockyard-dsh-add-trigger:focus-visible{outline:2px solid var(--dsw-alias-border-l3,#8fa3c7);outline-offset:1px}
 .dockyard-dsh-dot{display:inline-block;width:6px;height:6px;flex:none;border-radius:50%;background:var(--dsw-alias-label-caption,#8b93a1);margin-top:0.5px}
 .dockyard-dsh-dot[data-live=true]{background:#79d6c8;box-shadow:0 0 8px rgba(121,214,200,.8)}
 .dockyard-dsh-dot[data-loading=true]{background:#cbb7ff;animation:dockyard-dsh-pulse 1s ease-in-out infinite}
@@ -60,16 +68,34 @@ section[data-dockyard-model-group-collapsed="true"]>[role="menuitemradio"]{displ
 .dockyard-dsh-chevron{display:inline-flex;width:14px;height:14px;flex:none;align-items:center;justify-content:center;color:var(--dsw-alias-label-caption,#8b93a1);transition:transform 140ms ease;transform-origin:center}
 .dockyard-dsh-chevron[data-open=true]{transform:rotate(180deg)}
 .dockyard-dsh-chevron svg{display:block;width:14px;height:14px}
-.dockyard-dsh-popup{position:fixed;z-index:1000;left:var(--dockyard-dsh-popup-left,14px);top:var(--dockyard-dsh-popup-top,14px);right:auto;bottom:var(--dockyard-dsh-popup-bottom,auto);box-sizing:border-box;width:min(480px,calc(100vw - 28px));max-height:var(--dockyard-dsh-popup-max-height,min(560px,calc(100vh - 28px)));max-height:var(--dockyard-dsh-popup-max-height,min(560px,calc(100dvh - 28px)));overflow:hidden;display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16));border-radius:14px;background:var(--dsw-specific-menu,#2d2d31);box-shadow:var(--dsw-shadow-lv3,0 16px 50px rgba(0,0,0,.4));color:var(--dsw-alias-label-primary,#f5f7fb);font:400 12px/18px Inter,var(--dsw-font-family,sans-serif);text-align:left}
+.dockyard-dsh-popup{position:fixed;z-index:1000;left:var(--dockyard-dsh-popup-left,14px);top:var(--dockyard-dsh-popup-top,14px);right:auto;bottom:var(--dockyard-dsh-popup-bottom,auto);box-sizing:border-box;width:min(480px,calc(100vw - 28px));max-width:calc(100vw - 28px);min-width:0;max-height:var(--dockyard-dsh-popup-max-height,min(560px,calc(100vh - 28px)));max-height:var(--dockyard-dsh-popup-max-height,min(560px,calc(100dvh - 28px)));overflow:hidden;display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16));border-radius:14px;background:var(--dsw-specific-menu,#2d2d31);box-shadow:var(--dsw-shadow-lv3,0 16px 50px rgba(0,0,0,.4));color:var(--dsw-alias-label-primary,#f5f7fb);font:400 12px/18px Inter,var(--dsw-font-family,sans-serif);text-align:left}
 .dockyard-dsh-popup-scroll{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:1px}
-.dockyard-dsh-provider-list{display:flex;flex-direction:column;gap:6px}
-.dockyard-dsh-provider-row{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:8px 9px;border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.1));border-radius:10px;background:rgba(255,255,255,.035);color:inherit;cursor:pointer;font:inherit;text-align:left}
+.dockyard-dsh-settings-section{box-sizing:border-box;width:100%;min-width:0;color:var(--dsw-alias-label-primary,#f5f7fb)}
+.dockyard-dsh-settings-section>.dockyard-dsh-popup{position:static;width:100%;max-width:none;max-height:none;overflow:visible;gap:14px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.dockyard-dsh-settings-section .dockyard-dsh-popup-scroll{max-height:none;overflow:visible;gap:14px;padding-right:0}
+.dockyard-dsh-settings-section .dockyard-dsh-section{gap:8px}
+.dockyard-dsh-native-key-popup{min-width:0;max-width:calc(100vw - 28px)}
+.dockyard-dsh-native-key-popup>.dockyard-dsh-popup-scroll{display:flex!important;flex:1 1 auto!important;flex-direction:column!important;align-items:stretch!important;min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box;overflow-x:hidden!important}
+.dockyard-dsh-native-key-popup>.dockyard-dsh-popup-scroll>*{box-sizing:border-box;flex:0 0 auto!important;min-width:0!important;width:100%!important;max-width:100%!important}
+.dockyard-dsh-native-key-popup .dockyard-dsh-status{box-sizing:border-box;min-width:0;width:100%;max-width:100%}
+.dockyard-dsh-native-key-popup .dockyard-dsh-model-context{min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:normal}
+.dockyard-dsh-native-key-popup .dockyard-dsh-field,.dockyard-dsh-native-key-popup .dockyard-dsh-key-form,.dockyard-dsh-native-key-popup .dockyard-dsh-section,.dockyard-dsh-native-key-popup .dockyard-dsh-account,.dockyard-dsh-native-key-popup .dockyard-dsh-quota,.dockyard-dsh-native-key-popup .dockyard-dsh-key-notice{box-sizing:border-box;min-width:0;width:100%;max-width:100%}
+.dockyard-dsh-native-key-popup .dockyard-dsh-field{flex-wrap:wrap}
+.dockyard-dsh-native-key-popup .dockyard-dsh-field-label{min-width:0}
+.dockyard-dsh-native-key-popup .dockyard-dsh-select{box-sizing:border-box;min-width:0;width:min(170px,100%);flex:0 1 auto}
+.dockyard-dsh-native-key-popup .dockyard-dsh-key-form-row{flex-wrap:wrap}
+.dockyard-dsh-native-key-popup .dockyard-dsh-key-form-row .dockyard-dsh-key-input{flex:1 1 220px}
+@media (max-width:420px){.dockyard-dsh-native-key-popup .dockyard-dsh-field{align-items:stretch;flex-direction:column;gap:6px}.dockyard-dsh-native-key-popup .dockyard-dsh-select{width:100%;max-width:none}.dockyard-dsh-native-key-popup .dockyard-dsh-key-form-row{flex-direction:column}.dockyard-dsh-native-key-popup .dockyard-dsh-key-form-row .dockyard-dsh-key-input,.dockyard-dsh-native-key-popup .dockyard-dsh-key-save{width:100%;flex:0 0 auto}}
+.dockyard-dsh-provider-list{display:flex;flex-direction:column;gap:10px}
+.dockyard-dsh-provider-row{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:11px 14px;border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.1));border-radius:12px;background:rgba(255,255,255,.035);color:inherit;cursor:pointer;font:inherit;text-align:left;transition:border-color 140ms ease,background 140ms ease,transform 140ms ease}
 .dockyard-dsh-provider-row:hover,.dockyard-dsh-provider-row[data-current=true]{border-color:rgba(121,214,200,.5);background:rgba(121,214,200,.08)}
+.dockyard-dsh-provider-row:hover{transform:translateY(-1px)}
 .dockyard-dsh-provider-row:focus-visible{outline:2px solid var(--dsw-alias-border-l3,#8fa3c7);outline-offset:1px}
-.dockyard-dsh-provider-row-copy{min-width:0;flex:1}
-.dockyard-dsh-provider-row-name{overflow:hidden;color:var(--dsw-alias-label-primary,#f5f7fb);font-size:12px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
-.dockyard-dsh-provider-row-meta{margin-top:2px;overflow:hidden;color:var(--dsw-alias-label-caption,#8b93a1);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
-.dockyard-dsh-provider-row-arrow{flex:none;color:var(--dsw-alias-label-caption,#8b93a1);font-size:18px;line-height:18px}
+.dockyard-dsh-provider-row-copy{display:flex;align-items:baseline;gap:8px;min-width:0;flex:1}
+.dockyard-dsh-provider-row-name{min-width:0;overflow:hidden;color:var(--dsw-alias-label-primary,#f5f7fb);font-size:13px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}
+.dockyard-dsh-provider-row-meta{min-width:0;overflow:hidden;color:var(--dsw-alias-label-caption,#8b93a1);font-size:11px;line-height:17px;text-overflow:ellipsis;white-space:nowrap}
+.dockyard-dsh-provider-row-arrow{flex:none;margin-left:4px;color:var(--dsw-alias-label-caption,#8b93a1);font-size:20px;line-height:20px;transition:transform 140ms ease,color 140ms ease}
+.dockyard-dsh-provider-row:hover .dockyard-dsh-provider-row-arrow{transform:translateX(2px);color:var(--dsw-alias-label-secondary,#c7ccd5)}
 .dockyard-dsh-head{display:flex;align-items:flex-start;gap:10px;padding-bottom:2px}
 .dockyard-dsh-head-copy{min-width:0;flex:1}
 .dockyard-dsh-eyebrow{color:#94d9d0;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase}
@@ -79,10 +105,10 @@ section[data-dockyard-model-group-collapsed="true"]>[role="menuitemradio"]{displ
 .dockyard-dsh-close{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:var(--dsw-alias-label-tertiary,#a9b0ba);cursor:pointer;font-size:0;line-height:0}
 .dockyard-dsh-close::before{content:"×";display:block;font:600 18px/18px Inter,var(--dsw-font-family,sans-serif);transform:translateY(-0.5px)}
 .dockyard-dsh-close:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(255,255,255,.08));color:var(--dsw-alias-label-primary,#fff)}
-.dockyard-dsh-status{display:flex;align-items:center;gap:0;min-height:28px;padding:6px 0;border-radius:8px;background:var(--dsw-alias-bg-module-platform,rgba(255,255,255,.06));color:var(--dsw-alias-label-tertiary,#a9b0ba)}
+.dockyard-dsh-status{display:flex;align-items:center;gap:8px;box-sizing:border-box;min-height:40px;padding:10px 12px;border-radius:9px;background:var(--dsw-alias-bg-module-platform,rgba(255,255,255,.06));color:var(--dsw-alias-label-tertiary,#a9b0ba);line-height:18px}
 .dockyard-dsh-status[data-error=true]{background:rgba(255,104,104,.11);color:var(--dsw-alias-state-error-primary,#ff7a7a)}
 .dockyard-dsh-status[data-success=true]{background:rgba(156,229,220,.08);color:#9ce5dc}
-.dockyard-dsh-status-copy{display:block;align-self:center;min-width:0;flex:1;overflow-wrap:anywhere;white-space:normal;text-align:left}
+.dockyard-dsh-status-copy{display:block;align-self:center;min-width:0;flex:1;overflow-wrap:anywhere;white-space:normal;text-align:left;line-height:18px}
 .dockyard-dsh-auth-status{align-items:flex-start}
 .dockyard-dsh-auth-status .dockyard-dsh-status-copy{white-space:normal;overflow-wrap:anywhere;line-height:18px}
 .dockyard-dsh-auth-status .dockyard-dsh-auth-diagnostic{flex-basis:100%;color:var(--dsw-alias-state-error-primary,#ff7a7a)}
@@ -106,13 +132,26 @@ section[data-dockyard-model-group-collapsed="true"]>[role="menuitemradio"]{displ
 .dockyard-dsh-field-label{flex:1;color:var(--dsw-alias-label-tertiary,#a9b0ba);text-align:left}
 .dockyard-dsh-select{max-width:170px;height:27px;padding:0 7px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16));border-radius:6px;background:var(--dsw-specific-menu,#2d2d31);color:var(--dsw-alias-label-primary,#f5f7fb);font:500 11px/20px Inter,var(--dsw-font-family,sans-serif)}
 .dockyard-dsh-section{display:flex;flex-direction:column;gap:6px}
-.dockyard-dsh-section-title{display:flex;width:100%;box-sizing:border-box;flex-direction:column;align-items:flex-start;gap:1px;color:var(--dsw-alias-label-tertiary,#a9b0ba);font-size:10px;font-weight:700;letter-spacing:1.2px;line-height:18px;text-transform:uppercase;text-align:left}
+.dockyard-dsh-section-title{display:flex;width:100%;box-sizing:border-box;flex-direction:column;align-items:flex-start;gap:3px;color:var(--dsw-alias-label-tertiary,#a9b0ba);font-size:10px;font-weight:700;letter-spacing:1.2px;line-height:18px;text-transform:uppercase;text-align:left}
 .dockyard-dsh-section-title>span:first-child{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dockyard-dsh-section-value{display:block;min-width:0;max-width:100%;margin:0;color:var(--dsw-alias-label-caption,#8b93a1);font-size:11px;font-weight:400;letter-spacing:0;line-height:16px;text-transform:none;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dockyard-dsh-tier-list{display:flex;gap:5px;flex-wrap:wrap}
 .dockyard-dsh-tier{min-height:25px;padding:2px 8px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16));border-radius:999px;background:transparent;color:var(--dsw-alias-label-tertiary,#a9b0ba);cursor:pointer;font:500 11px/18px Inter,var(--dsw-font-family,sans-serif)}
 .dockyard-dsh-tier[data-active=true]{border-color:rgba(121,214,200,.65);background:rgba(121,214,200,.12);color:#a5e6dd}
 .dockyard-dsh-tier:disabled{cursor:default;opacity:.55}
+.dockyard-dsh-context-window{gap:7px}
+.dockyard-dsh-context-window-row{display:flex;align-items:center;gap:6px;min-width:0}
+.dockyard-dsh-context-window-select{box-sizing:border-box;min-width:0;flex:1;height:29px;padding:0 7px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16));border-radius:6px;background:var(--dsw-specific-menu,#2d2d31);color:var(--dsw-alias-label-primary,#f5f7fb);font:500 11px/20px Inter,var(--dsw-font-family,sans-serif)}
+.dockyard-dsh-context-window-input{box-sizing:border-box;min-width:0;flex:1;height:29px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2,rgba(255,255,255,.16));border-radius:6px;background:rgba(0,0,0,.12);color:var(--dsw-alias-label-primary,#f5f7fb);font:400 11px/20px Inter,var(--dsw-font-family,sans-serif)}
+.dockyard-dsh-context-window-input:focus{border-color:rgba(121,214,200,.7);outline:0;box-shadow:0 0 0 2px rgba(121,214,200,.12)}
+.dockyard-dsh-context-window-input::placeholder{color:var(--dsw-alias-label-caption,#8b93a1)}
+.dockyard-dsh-context-window-save{height:29px;padding:0 8px;border:1px solid rgba(121,214,200,.55);border-radius:6px;background:rgba(121,214,200,.08);color:#a5e6dd;cursor:pointer;font:500 10px/18px Inter,var(--dsw-font-family,sans-serif);white-space:nowrap}
+.dockyard-dsh-context-window-save:hover:not(:disabled){background:rgba(121,214,200,.16)}
+.dockyard-dsh-context-window-save:disabled{cursor:default;opacity:.45}
+.dockyard-dsh-context-window-meta{display:flex;align-items:center;gap:7px;min-width:0;flex-wrap:wrap;color:var(--dsw-alias-label-caption,#8b93a1);font-size:10px;line-height:15px}
+.dockyard-dsh-context-window-warning{color:#cbb7ff}
+.dockyard-dsh-context-window-message{color:#9ce5dc;font-size:10px;line-height:15px}
+.dockyard-dsh-context-window-message[data-error=true]{color:#ff9a83}
 .dockyard-dsh-account{display:flex;flex-direction:column;gap:7px;padding:9px;border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.1));border-radius:10px;background:rgba(255,255,255,.035)}
 .dockyard-dsh-account[data-current=true]{border-color:rgba(121,214,200,.45);background:rgba(121,214,200,.065)}
 .dockyard-dsh-account-head{display:flex;align-items:center;gap:8px}
@@ -355,14 +394,37 @@ function quotaPercent(window) {
   return Math.max(0, Math.min(100, Math.round((window.remaining / window.limit) * 100)));
 }
 
+function balanceCurrency(window) {
+  const raw = String(window?.currency ?? window?.unit ?? "").trim().toUpperCase();
+  const normalized = raw === "RMB" ? "CNY" : raw;
+  return /^[A-Z]{3}$/.test(normalized) ? normalized : null;
+}
+
+function formatBalance(window, t, value = window?.remaining) {
+  const amount = typeof value === "number" ? value : Number(value);
+  const currency = balanceCurrency(window);
+  if (!Number.isFinite(amount) || !currency) return null;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return null;
+  }
+}
+
 function quotaSummary(account, t) {
   const health = account?.health?.status;
   if (health === "expired") return text(t, "health.expired");
   if (health === "exhausted") return text(t, "health.exhausted");
   if (health === "degraded" && account?.health?.lastError) return text(t, "health.degraded");
-  const first = quotaRowsForAccount(account, t)[0];
-  const percent = quotaPercent(first);
-  if (percent !== null) return `${percent}%`;
+  const rows = quotaRowsForAccount(account, t);
+  const indicator = selectQuotaIndicator(rows);
+  if (indicator?.type === "balance") return formatBalance(indicator.window, t) ?? text(t, "value.unknown");
+  if (indicator?.type === "quota") return `${indicator.percent}%`;
+  const first = selectPrimaryQuotaWindow(rows);
   if (first?.remaining !== null && first?.remaining !== undefined) return formatNumber(first.remaining, t);
   if (account?.resources?.quotaDiagnostic) return text(t, "value.quota");
   return account ? text(t, "summary.connected") : text(t, "summary.notConnected");
@@ -395,6 +457,14 @@ function accountIdentityLine(account, t) {
   return account?.accountId ?? text(t, "value.unknown");
 }
 
+function accountPlanLabel(account, t) {
+  if (account?.subscription?.plan) return account.subscription.plan;
+  if (Array.isArray(account?.quota?.windows) && account.quota.windows.length > 0) {
+    return text(t, "account.quotaReturned");
+  }
+  return text(t, "account.planMissing");
+}
+
 function healthLabel(status, t) {
   return status === "healthy" ? text(t, "health.healthy")
     : status === "degraded" ? text(t, "health.degraded")
@@ -419,6 +489,10 @@ class DockyardClientController {
   snapshotPromise = null;
   refreshPromises = new Map();
   authTimers = new Map();
+  // Per-session poll generation. Cancelling (or rescheduling) bumps the
+  // generation so an in-flight poll RPC can no longer apply its stale result
+  // over the cancelled/newer state.
+  authGenerations = new Map();
 
   constructor(remote, t) {
     this.remote = remote;
@@ -662,11 +736,16 @@ class DockyardClientController {
   scheduleAuth(providerId, sessionId) {
     if (this.authTimers.has(sessionId)) return;
     let attempts = 0;
+    const generation = (this.authGenerations.get(sessionId) ?? 0) + 1;
+    this.authGenerations.set(sessionId, generation);
     const tick = async () => {
       this.authTimers.delete(sessionId);
       if (++attempts > 180) return;
       try {
         const value = await this.call("poll", { providerId, sessionId });
+        // A cancel (or a newer scheduling round) invalidated this poll;
+        // applying its result would resurrect cancelled/older auth state.
+        if (this.authGenerations.get(sessionId) !== generation) return;
         const result = this.applyValue(value, providerId);
         if (["pending", "processing"].includes(result?.status)) {
           const timer = setTimeout(tick, 1000);
@@ -683,6 +762,8 @@ class DockyardClientController {
     const timer = this.authTimers.get(sessionId);
     if (timer) clearTimeout(timer);
     this.authTimers.delete(sessionId);
+    // Invalidate any in-flight poll for this session before cancelling.
+    this.authGenerations.set(sessionId, (this.authGenerations.get(sessionId) ?? 0) + 1);
     this.setState({ action: "cancel", status: "loading", providerId, error: null, message: null });
     try {
       const value = await this.call("cancel", { providerId, sessionId });
@@ -770,6 +851,151 @@ function modelDetails(directoryState, providerId = null) {
   return { current, group, model, efforts };
 }
 
+function modelContextWindow(model) {
+  const values = [model?.context?.contextWindow, model?.contextWindow, model?.metadata?.contextWindow];
+  return values.find((value) => Number.isSafeInteger(value) && value > 0) ?? null;
+}
+
+function contextWindowScopeLabel({ accountId, keyRef }, t) {
+  if (keyRef) return text(t, "contextWindow.scopeKey");
+  if (accountId) return text(t, "contextWindow.scopeAccount");
+  return text(t, "contextWindow.scopeProvider");
+}
+
+function normalizeDraftContextWindow(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const numeric = Number(String(value).replaceAll(",", "").trim());
+  return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
+function ContextWindowSection({ providerId, current, model, accountId = null, keyRef = null, remote, t }) {
+  const modelId = current?.model ?? null;
+  const detected = modelContextWindow(model);
+  const scope = {
+    providerId,
+    modelId,
+    ...(accountId ? { accountId } : {}),
+    ...(keyRef ? { keyRef } : {}),
+  };
+  const [state, setState] = useState({ status: "idle", override: null, effectiveOverride: null, source: "auto" });
+  const [mode, setMode] = useState("auto");
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ status: "loading", override: null, effectiveOverride: null, source: "auto" });
+    setMode("auto");
+    setDraft("");
+    setMessage(null);
+    if (!modelId || typeof remote?.getContextWindowOverride !== "function") {
+      setState({ status: "ready", override: null, effectiveOverride: null, source: "auto" });
+      return undefined;
+    }
+    Promise.resolve(remote.getContextWindowOverride(scope))
+      .then((response) => unwrapRemote(response, t))
+      .then((value) => {
+        if (cancelled) return;
+        const override = normalizeDraftContextWindow(value?.override);
+        const effectiveOverride = normalizeDraftContextWindow(value?.effectiveOverride);
+        setState({
+          status: "ready",
+          override,
+          effectiveOverride,
+          source: value?.source ?? (override !== null ? "custom" : "auto"),
+        });
+        setMode(override !== null ? "custom" : "auto");
+        setDraft(override === null ? "" : String(override));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setState({ status: "error", override: null, effectiveOverride: null, source: "auto" });
+        setMessage({ error: true, text: errorText(error, t) });
+      });
+    return () => { cancelled = true; };
+  }, [remote, providerId, modelId, accountId, keyRef]);
+
+  if (!modelId) return null;
+
+  const effective = state.effectiveOverride ?? detected;
+  const modeValue = state.source === "inherited" && state.override === null ? "auto" : mode;
+  const save = async () => {
+    const value = mode === "custom" ? normalizeDraftContextWindow(draft) : null;
+    if (mode === "custom" && value === null) {
+      setMessage({ error: true, text: text(t, "contextWindow.invalid") });
+      return;
+    }
+    if (typeof remote?.setContextWindowOverride !== "function") {
+      setMessage({ error: true, text: text(t, "error.remoteNotMounted", { method: "setContextWindowOverride" }) });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const saved = unwrapRemote(await remote.setContextWindowOverride({ ...scope, value }), t);
+      const override = normalizeDraftContextWindow(saved?.override);
+      const effectiveOverride = normalizeDraftContextWindow(saved?.effectiveOverride);
+      setState({
+        status: "ready",
+        override,
+        effectiveOverride,
+        source: saved?.source ?? (override !== null ? "custom" : "auto"),
+      });
+      setMode(override !== null ? "custom" : "auto");
+      setDraft(override === null ? "" : String(override));
+      setMessage({ error: false, text: text(t, "contextWindow.saved") });
+    } catch (error) {
+      setMessage({ error: true, text: errorText(error, t) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return h("div", { className: "dockyard-dsh-section dockyard-dsh-context-window" },
+    h("div", { className: "dockyard-dsh-section-title" },
+      h("span", null, text(t, "contextWindow.title")),
+      h("span", { className: "dockyard-dsh-section-value" }, contextWindowScopeLabel(scope, t))),
+    h("div", { className: "dockyard-dsh-context-window-meta" },
+      h("span", null, text(t, "contextWindow.detected", {
+        value: detected === null ? text(t, "contextWindow.noDetected") : `${formatNumber(detected, t)} tokens`,
+      })),
+      h("span", null, text(t, "contextWindow.effective", {
+        value: effective === null ? text(t, "contextWindow.noDetected") : `${formatNumber(effective, t)} tokens`,
+      }))),
+    h("div", { className: "dockyard-dsh-context-window-row" },
+      h("select", {
+        className: "dockyard-dsh-context-window-select",
+        value: modeValue,
+        disabled: busy || state.status === "loading",
+        onChange: (event) => {
+          setMode(event.target.value);
+          setMessage(null);
+          if (event.target.value !== "custom") setDraft("");
+        },
+      },
+        h("option", { value: "auto" }, text(t, "contextWindow.auto")),
+        h("option", { value: "custom" }, text(t, "contextWindow.custom"))),
+      mode === "custom" ? h("input", {
+        className: "dockyard-dsh-context-window-input",
+        type: "number",
+        min: "1",
+        step: "1",
+        value: draft,
+        placeholder: text(t, "contextWindow.placeholder"),
+        disabled: busy,
+        onChange: (event) => setDraft(event.target.value),
+      }) : null,
+      h("button", {
+        type: "button",
+        className: "dockyard-dsh-context-window-save",
+        disabled: busy || state.status === "loading" || (mode === "custom" && normalizeDraftContextWindow(draft) === null),
+        onClick: save,
+      }, busy ? text(t, "contextWindow.saving") : text(t, "contextWindow.save"))),
+    h("div", { className: "dockyard-dsh-context-window-warning" }, text(t, "contextWindow.warning")),
+    message ? h("div", { className: "dockyard-dsh-context-window-message", "data-error": message.error }, message.text) : null);
+}
+
 function ChevronIcon({ open }) {
   return h("span", {
     className: "dockyard-dsh-chevron",
@@ -802,10 +1028,17 @@ function quotaView(account, t) {
     );
   }
   return h("div", { className: "dockyard-dsh-quota" }, rows.map((window, index) => {
-    const percent = quotaPercent(window);
-    const value = window.limit === null || window.limit === undefined
-      ? formatNumber(window.remaining, t)
-      : `${formatNumber(window.remaining, t)} / ${formatNumber(window.limit, t)}`;
+    const balance = window.kind === "balance";
+    const percent = balance ? null : quotaPercent(window);
+    const remaining = balance ? (formatBalance(window, t) ?? formatNumber(window.remaining, t)) : formatNumber(window.remaining, t);
+    const limit = balance && window.limit !== null && window.limit !== undefined
+      ? (formatBalance(window, t, window.limit) ?? formatNumber(window.limit, t))
+      : null;
+    const value = balance
+      ? limit ? `${remaining} / ${limit}` : remaining
+      : window.limit === null || window.limit === undefined
+        ? remaining
+        : `${remaining} / ${formatNumber(window.limit, t)}`;
     const unit = window.unit ? ` ${window.unit}` : "";
     return h("div", { key: `${window.id ?? "quota"}-${index}` },
       h("div", { className: "dockyard-dsh-quota-row" },
@@ -844,7 +1077,7 @@ function AccountCard({ account, current, providerId, controller, busy, t }) {
           },
         }, text(t, "account.remove")))),
     h("div", { className: "dockyard-dsh-account-meta" },
-      h("span", { className: "dockyard-dsh-health", "data-bad": ["degraded", "cooldown", "expired", "exhausted"].includes(health) }, `${healthLabel(health, t)} · ${account.subscription?.plan ?? text(t, "account.planMissing")}`),
+      h("span", { className: "dockyard-dsh-health", "data-bad": ["degraded", "cooldown", "expired", "exhausted"].includes(health) }, `${healthLabel(health, t)} · ${accountPlanLabel(account, t)}`),
       account.refresh?.nextRefreshAt ? h("span", null, `OAuth: ${formatDate(account.refresh.nextRefreshAt, t)}`) : null),
     account.resources?.identityNote ? h("div", { className: "dockyard-dsh-account-note" }, account.resources.identityNote) : null,
     account.health?.lastError ? h("div", { className: "dockyard-dsh-account-error", title: account.health.lastError }, account.health.lastError) : null,
@@ -977,7 +1210,7 @@ function NativeKeyCard({ entry, providerId, controller, busy, t }) {
     entry?.usage ? nativeQuotaView(entry, t) : null);
 }
 
-function NativeKeyPopup({ providerId, native, directory, directoryState, nativeController, onClose, t }) {
+function NativeKeyPopup({ providerId, native, directory, directoryState, nativeController, remote, onClose, t }) {
   const [tierBusy, setTierBusy] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [labelDraft, setLabelDraft] = useState("");
@@ -988,6 +1221,7 @@ function NativeKeyPopup({ providerId, native, directory, directoryState, nativeC
   const busy = native.action !== null;
   const keys = native.keys ?? [];
   const configuredCount = keys.filter((entry) => entry.configured).length;
+  const activeKeyRef = native.apiKeyRef ?? keys.find((entry) => entry.active)?.ref ?? null;
 
   const chooseTier = async (value) => {
     if (!current || !directory || tierBusy) return;
@@ -1010,7 +1244,7 @@ function NativeKeyPopup({ providerId, native, directory, directoryState, nativeC
 
   const title = native.entry?.displayName ?? group?.name ?? providerId;
   return h("div", {
-    className: "dockyard-dsh-popup",
+    className: "dockyard-dsh-popup dockyard-dsh-native-key-popup",
     role: "dialog",
     "aria-label": text(t, "native.keyAria", { title }),
     onMouseDown: (event) => event.stopPropagation(),
@@ -1047,6 +1281,7 @@ function NativeKeyPopup({ providerId, native, directory, directoryState, nativeC
           h("option", { value: "manual" }, text(t, "nativePolicy.manual")),
           h("option", { value: "round_robin", disabled: native.runtimeMode !== "request-key-pool" }, text(t, "nativePolicy.round_robin")),
           h("option", { value: "failover", disabled: native.runtimeMode !== "request-key-pool" }, text(t, "nativePolicy.failover"))),
+        ),
       h("div", { className: "dockyard-dsh-key-form" },
         h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "native.addKeyTitle")), h("span", { className: "dockyard-dsh-section-value" }, text(t, "native.credentialsWrite"))),
         h("div", { className: "dockyard-dsh-key-form-row" },
@@ -1077,6 +1312,14 @@ function NativeKeyPopup({ providerId, native, directory, directoryState, nativeC
           title: effort.description ?? effort.id,
           onClick: () => chooseTier(effort.id),
         }, effort.name ?? effort.id)))) : null,
+      h(ContextWindowSection, {
+        providerId,
+        current,
+        model,
+        keyRef: activeKeyRef,
+        remote,
+        t,
+      }),
       h("div", { className: "dockyard-dsh-section" },
         h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "native.configuredKeys")), h("span", { className: "dockyard-dsh-section-value" }, `${configuredCount}`)),
         keys.length === 0
@@ -1091,7 +1334,7 @@ function NativeKeyPopup({ providerId, native, directory, directoryState, nativeC
           }))),
       h("div", { className: "dockyard-dsh-section" },
         h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "native.quotaWindow")), h("span", { className: "dockyard-dsh-section-value" }, text(t, "native.providerRealtime"))),
-        nativeQuotaView(native, t)))));
+        nativeQuotaView(native, t))));
 }
 
 function SubscriptionOverviewPopup({ providers, directoryState, controlState, controller, selectedProviderId, onSelect, onClose, t }) {
@@ -1134,9 +1377,11 @@ function SubscriptionOverviewPopup({ providers, directoryState, controlState, co
           : h("div", { className: "dockyard-dsh-provider-list" }, providers.map((provider) => {
             const providerId = provider.providerId;
             const group = directoryState?.groups?.find((entry) => entry.id === providerId);
-            const modelCount = Array.isArray(group?.models)
-              ? text(t, "subscription.modelCount", { count: group.models.length })
-              : text(t, "subscription.modelPending");
+            const modelCount = directoryState
+              ? Array.isArray(group?.models)
+                ? text(t, "subscription.modelCount", { count: group.models.length })
+                : text(t, "subscription.modelPending")
+              : null;
             const displayName = providerDisplayName(providerId, provider.manifest, t);
             return h("button", {
               type: "button",
@@ -1148,12 +1393,62 @@ function SubscriptionOverviewPopup({ providers, directoryState, controlState, co
             },
               h("span", { className: "dockyard-dsh-provider-row-copy" },
                 h("span", { className: "dockyard-dsh-provider-row-name" }, displayName),
-                h("span", { className: "dockyard-dsh-provider-row-meta" }, `${providerOverviewSummary(provider, t)} · ${modelCount}`)),
+                h("span", { className: "dockyard-dsh-provider-row-meta" }, `${providerOverviewSummary(provider, t)}${modelCount ? ` · ${modelCount}` : ""}`)),
               h("span", { className: "dockyard-dsh-provider-row-arrow", "aria-hidden": true }, "›"));
-          })))));
+         })))));
 }
 
-function DockyardPopup({ providerId, provider, directory, directoryState, controlState, controller, onOpenOverview, onClose, t }) {
+function SubscriptionSettingsSection({ close, controller, remote, t }) {
+  const controlState = useSnapshot(controller.store);
+  const [selectedProviderId, setSelectedProviderId] = useState(null);
+  const providers = controlState.snapshot?.providers ?? [];
+  const provider = selectedProviderId
+    ? providerFromSnapshot(controlState.snapshot, selectedProviderId)
+    : null;
+
+  useEffect(() => {
+    controller.ensureSnapshot().catch(() => {});
+  }, [controller]);
+
+  useEffect(() => {
+    if (selectedProviderId && !provider) setSelectedProviderId(null);
+  }, [selectedProviderId, provider]);
+
+  useEffect(() => {
+    if (!selectedProviderId || !provider) return undefined;
+    controller.ensure(selectedProviderId).catch(() => {});
+    void controller.refresh(selectedProviderId);
+    const timer = setInterval(() => controller.refresh(selectedProviderId), 30_000);
+    return () => clearInterval(timer);
+  }, [controller, selectedProviderId, Boolean(provider)]);
+
+  return h("div", { className: "dockyard-dsh-settings-section" },
+    provider
+      ? h(DockyardPopup, {
+        providerId: selectedProviderId,
+        provider,
+        directory: null,
+        directoryState: null,
+        controlState,
+        controller,
+        remote,
+        onOpenOverview: () => setSelectedProviderId(null),
+        onClose: close,
+        t,
+      })
+      : h(SubscriptionOverviewPopup, {
+        providers,
+        directoryState: null,
+        controlState,
+        controller,
+        selectedProviderId: null,
+        onSelect: setSelectedProviderId,
+        onClose: close,
+        t,
+      }));
+}
+
+function DockyardPopup({ providerId, provider, directory, directoryState, controlState, controller, remote, onOpenOverview, onClose, t }) {
   const [tierBusy, setTierBusy] = useState(false);
   const { current, group, model, efforts } = modelDetails(directoryState, providerId);
   const modelLabel = model?.name ?? current?.model ?? text(t, "title.noModel");
@@ -1161,6 +1456,7 @@ function DockyardPopup({ providerId, provider, directory, directoryState, contro
   const tier = current?.reasoningEffort ?? model?.reasoning?.defaultEffort ?? null;
   const accounts = provider?.accounts ?? [];
   const activeId = provider?.defaultAccountId ?? null;
+  const contextAccountId = provider?.defaultAccountId ?? (accounts.length === 1 ? accounts[0]?.accountId ?? null : null);
   const busy = controlState.action !== null;
   const authInProgress = controlState.auth?.providerId === providerId
     && ["pending", "processing"].includes(controlState.auth?.status)
@@ -1238,6 +1534,14 @@ function DockyardPopup({ providerId, provider, directory, directoryState, contro
           title: effort.description ?? effort.id,
           onClick: () => chooseTier(effort.id),
         }, effort.name ?? effort.id)))) : null,
+      h(ContextWindowSection, {
+        providerId,
+        current,
+        model,
+        accountId: contextAccountId,
+        remote,
+        t,
+      }),
       h("div", { className: "dockyard-dsh-section" },
         h("div", { className: "dockyard-dsh-section-title" }, h("span", null, text(t, "subscription.connectedAccounts")), h("span", { className: "dockyard-dsh-section-value" }, `${accounts.length}`)),
         accounts.length === 0
@@ -1258,7 +1562,7 @@ function DockyardPopup({ providerId, provider, directory, directoryState, contro
         h(CandidateList, { scan: controlState.scan, providerId, controller, busy, accounts, t })) : null));
 }
 
-function DockyardAccountControl({ directory, modelDirectory, controller, nativeController, t }) {
+function DockyardAccountControl({ directory, modelDirectory, controller, nativeController, remote, t }) {
   const directoryState = useSnapshot(directory);
   const controlState = useSnapshot(controller.store);
   const nativeState = useSnapshot(nativeController.store);
@@ -1266,6 +1570,7 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
   const [showOverview, setShowOverview] = useState(false);
   const [detailProviderId, setDetailProviderId] = useState(null);
   const rootRef = useRef(null);
+  const compactIndicatorCacheRef = useRef({ providerId: null, indicator: null });
   const accountSignatureRef = useRef(undefined);
   const modelSelectionSignatureRef = useRef(undefined);
   const { current, group, model } = modelDetails(directoryState);
@@ -1277,8 +1582,6 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
   const providers = controlState.snapshot?.providers ?? [];
   const currentProvider = providerFromSnapshot(controlState.snapshot, currentProviderId);
   const currentNative = nativeState.providerId === currentProviderId && nativeState.native ? nativeState : null;
-  const currentNativeLoading = nativeState.providerId === currentProviderId
-    && ["loading", "error"].includes(nativeState.status);
   const providerId = showOverview ? null : detailProviderId ?? currentProviderId;
   const provider = providerFromSnapshot(controlState.snapshot, providerId);
   // Providers absent from the OAuth/account snapshot are DSH-native Key
@@ -1437,14 +1740,39 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
   const currentSelectedAccount = currentProvider?.defaultAccountId
     ? currentProvider.accounts?.find((account) => account.accountId === currentProvider.defaultAccountId)
     : currentProvider?.accounts?.length === 1 ? currentProvider.accounts[0] : null;
-  const summary = currentProviderId && currentProvider
-    ? currentProvider.accounts?.length > 1 && !currentProvider.defaultAccountId
-      ? text(t, "summary.accountCount", { count: currentProvider.accounts.length })
-      : quotaSummary(currentSelectedAccount, t)
-    : currentProviderId && currentNative
-      ? text(t, "summary.keyCount", { count: currentNative.keys?.filter((entry) => entry.configured).length ?? 0 })
-    : currentProviderId && currentNativeLoading ? text(t, "status.reading") : "";
   const loading = controlState.action !== null || nativeState.action !== null || directoryState.status === "loading";
+  const quotaSource = currentProvider
+    ? currentSelectedAccount?.quota
+    : currentNative?.quota ?? currentNative?.entry?.quota;
+  const liveCompactIndicator = selectQuotaIndicator(quotaWindowRows(quotaSource, t));
+  let compactIndicator = liveCompactIndicator;
+  if (liveCompactIndicator) {
+    compactIndicatorCacheRef.current = { providerId: currentProviderId, indicator: liveCompactIndicator };
+  } else if (loading && compactIndicatorCacheRef.current.providerId === currentProviderId) {
+    // A refresh clears the native quota briefly. Keep the last verified value
+    // mounted while the popup refreshes so the control does not jump away.
+    compactIndicator = compactIndicatorCacheRef.current.indicator;
+  } else if (!loading) {
+    compactIndicatorCacheRef.current = { providerId: currentProviderId, indicator: null };
+  }
+  const compactBalance = compactIndicator?.type === "balance"
+    ? formatBalance(compactIndicator.window, t)
+    : null;
+  const compactLabel = compactIndicator?.type === "balance"
+    ? compactBalance
+    : compactIndicator?.type === "quota" ? `${compactIndicator.percent}%` : null;
+  const compactVisible = Boolean(compactLabel);
+  const quotaValue = compactIndicator?.type === "quota" ? compactIndicator.percent : null;
+  const health = currentSelectedAccount?.health?.status;
+  const quotaLevel = loading
+    ? "loading"
+    : ["expired", "exhausted", "degraded"].includes(health)
+      ? "critical"
+      : compactIndicator?.type === "balance"
+        ? compactIndicator.remaining <= 0 ? "critical" : "balance"
+        : quotaValue === null
+        ? "unknown"
+        : quotaValue <= 10 ? "critical" : quotaValue <= 25 ? "warning" : "healthy";
   const providerLabel = currentProviderId
     ? providerDisplayName(currentProviderId, currentProvider?.manifest ?? currentNative?.entry, t)
     : text(t, "trigger.subscriptionManagement");
@@ -1473,29 +1801,32 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
   };
   const overviewOpen = open && (showOverview || !providerId || (!provider && !native));
   return h("div", { className: "dockyard-dsh-anchor", ref: rootRef },
-    h("button", {
+    compactVisible ? h("button", {
       type: "button",
-      className: "dockyard-dsh-trigger",
+      className: "dockyard-dsh-trigger dockyard-dsh-quota-trigger",
       title: currentProviderId
-         ? text(t, "trigger.providerModel", { provider: providerLabel, model: modelLabel })
+         ? `${text(t, "trigger.providerModel", { provider: providerLabel, model: modelLabel })} · ${compactLabel}`
          : text(t, "trigger.subscriptionManagement"),
       "aria-label": currentProviderId
-        ? `${providerLabel} ${currentProvider ? text(t, "trigger.accountQuota") : text(t, "trigger.keyQuota")}`
+        ? `${providerLabel} ${compactIndicator?.type === "balance" ? text(t, "value.balance") : text(t, "value.quota")} ${compactLabel}`
         : text(t, "subscription.aria"),
       "aria-expanded": open,
       onClick: toggleOpen,
     },
-      h("span", { className: "dockyard-dsh-dot", "data-live": Boolean(provider), "data-loading": loading }),
-      h("span", { className: "dockyard-dsh-label" }, providerLabel),
-      h("span", { className: "dockyard-dsh-summary" }, summary),
-      h(ChevronIcon, { open })),
-    h("button", {
-      type: "button",
-      className: "dockyard-dsh-add-trigger",
-      title: text(t, "trigger.addTitle"),
-      "aria-label": text(t, "subscription.addAria"),
-      onClick: openSubscriptionOverview,
-    }, text(t, "trigger.addSubscription")),
+      compactIndicator?.type === "balance"
+        ? h("span", { className: "dockyard-dsh-balance", "data-level": quotaLevel }, compactLabel)
+        : h("span", {
+          className: "dockyard-dsh-quota-meter",
+          role: "progressbar",
+          "aria-label": `${text(t, "value.quota")} ${compactLabel}`,
+          "aria-valuemin": 0,
+          "aria-valuemax": 100,
+          "aria-valuenow": quotaValue,
+          "data-level": quotaLevel,
+        }, h("span", {
+          className: "dockyard-dsh-quota-meter-fill",
+          style: { width: `${quotaValue}%` },
+        }))) : null,
     overviewOpen ? h(SubscriptionOverviewPopup, {
       providers,
       directoryState,
@@ -1518,6 +1849,7 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
       directoryState,
       controlState,
       controller,
+      remote,
       t,
        onOpenOverview: openSubscriptionOverview,
       onClose: () => setOpen(false),
@@ -1527,6 +1859,7 @@ function DockyardAccountControl({ directory, modelDirectory, controller, nativeC
       directory: modelDirectory,
       directoryState,
       nativeController,
+      remote,
       onClose: () => setOpen(false),
     }) : null);
 }
@@ -1551,8 +1884,8 @@ export async function apply(ctx) {
   ctx.inject(["slots", "modelDirectories", "connection"], (scope) => {
     const connection = scope.connection ?? ctx.get("connection");
     const nativeController = new NativeKeyPoolController(connection?.api, remote, t);
-    scope.slots.inject("conversation.input.left", () => scope.slots.register({
-      name: "conversation.input.left",
+    scope.slots.inject("conversation.input.right", () => scope.slots.register({
+      name: "conversation.input.right",
       id: "dockyard-account-control",
       order: 10,
        locale: DOCKYARD_LOCALE_NS,
@@ -1563,9 +1896,18 @@ export async function apply(ctx) {
           modelDirectory,
           controller,
           nativeController,
+          remote,
         };
       },
     }, DockyardAccountControl));
+    scope.slots.inject("settings.section", () => scope.slots.register({
+      name: "settings.section",
+      id: "dockyard-subscriptions",
+      order: 15,
+      label: () => text(t, "settings.subscriptionSection"),
+      locale: DOCKYARD_LOCALE_NS,
+      inject: () => ({ controller, remote }),
+    }, SubscriptionSettingsSection));
   });
   return async () => {
     disposeModelMenuFolding();
