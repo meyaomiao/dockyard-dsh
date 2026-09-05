@@ -1416,6 +1416,37 @@ test("Grok catalog loader caches a local provider response", async () => {
   assert.deepEqual(first.models, [{ id: "grok-live", name: "grok-live" }]);
   assert.strictEqual(first, second);
   assert.equal(reads, 1);
+  const forced = await loader({ force: true });
+  assert.equal(reads, 2);
+  assert.deepEqual(forced.models, [{ id: "grok-live", name: "grok-live" }]);
+});
+
+test("Grok catalog loader force refresh does not join an in-flight request", async () => {
+  let calls = 0;
+  let releaseFirst;
+  let enteredFirst;
+  const firstStarted = new Promise((resolve) => { releaseFirst = resolve; });
+  const firstEntered = new Promise((resolve) => { enteredFirst = resolve; });
+  const loader = createGrokCatalogLoader({
+    grokHome: "/provider/grok",
+    readJson: async () => {
+      const call = ++calls;
+      if (call === 1) {
+        enteredFirst();
+        await firstStarted;
+      }
+      return { models: { [`grok-${call}`]: { info: { model: `grok-${call}` } } } };
+    },
+    cacheTtlMs: 60_000,
+  });
+  const firstPromise = loader();
+  await firstEntered;
+  const forced = await loader({ force: true });
+  releaseFirst();
+  const first = await firstPromise;
+  assert.equal(calls, 2);
+  assert.deepEqual(forced.models, [{ id: "grok-2", name: "grok-2" }]);
+  assert.deepEqual(first.models, [{ id: "grok-1", name: "grok-1" }]);
 });
 
 test("Claude subscription status rejects API keys and maps live registry metadata", async () => {
@@ -1981,6 +2012,38 @@ test("Cursor status/catalog are sourced from the official CLI response", async (
     contextWindow: 128_000,
     maxTokens: 16_000,
   }]);
+});
+
+test("Cursor catalog loader force refresh does not join an in-flight request", async () => {
+  let calls = 0;
+  let releaseFirst;
+  let enteredFirst;
+  const firstStarted = new Promise((resolve) => { releaseFirst = resolve; });
+  const firstEntered = new Promise((resolve) => { enteredFirst = resolve; });
+  const loader = createCursorCatalogLoader({
+    commandRunner: async () => {
+      const call = ++calls;
+      if (call === 1) {
+        enteredFirst();
+        await firstStarted;
+      }
+      return {
+        output: JSON.stringify({
+          loggedIn: true,
+          models: [{ id: `cursor-${call}`, name: `Cursor ${call}` }],
+        }),
+        errorOutput: "",
+      };
+    },
+  });
+  const firstPromise = loader();
+  await firstEntered;
+  const forced = await loader({ force: true });
+  releaseFirst();
+  const first = await firstPromise;
+  assert.equal(calls, 2);
+  assert.equal(forced.models[0].id, "cursor-2");
+  assert.equal(first.models[0].id, "cursor-1");
 });
 
 test("Cursor Connect trailers expose upstream quota errors instead of an empty success", () => {

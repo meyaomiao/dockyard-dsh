@@ -529,10 +529,10 @@ export class CodexOAuthDriver {
     throw wrapped;
   }
 
-  async getCatalog() {
+  async getCatalog(context = {}) {
     if (this.catalogLoader) {
       try {
-        const catalog = await this.catalogLoader();
+        const catalog = await this.catalogLoader({ force: Boolean(context.force) });
         if (Array.isArray(catalog?.models) && catalog.models.length > 0) return catalog;
       } catch {
         // A catalog is advisory; native invocation can still accept an exact

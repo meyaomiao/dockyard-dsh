@@ -183,7 +183,7 @@ export function codexModelToDshCatalog(model) {
 /** Read the current Codex catalog shipped by the active DSH pi-ai install. */
 export function createCodexDshCatalogLoader({ moduleAnchor = null } = {}) {
   let dependenciesPromise;
-  return async () => {
+  return async function loadCatalog(_context = {}) {
     dependenciesPromise ??= loadDependencies(moduleAnchor);
     const { openaiCodexProvider } = await dependenciesPromise;
     const models = openaiCodexProvider().getModels();

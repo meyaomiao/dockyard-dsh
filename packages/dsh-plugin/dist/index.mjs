@@ -38,6 +38,7 @@ function markRemoteMethods() {
   for (const name2 of [
     "snapshot",
     "refresh",
+    "refreshCatalog",
     "scan",
     "add",
     "login",
@@ -85,6 +86,11 @@ var init_dockyard_remote_host = __esm({
       async refresh(request = {}) {
         const providerId = request?.providerId ?? null;
         const result = await this.dockyard.refresh(providerId);
+        return envelope(result, await this.dockyard.snapshot());
+      }
+      async refreshCatalog(request = {}) {
+        const providerId = request?.providerId ?? null;
+        const result = await this.dockyard.refreshCatalog(providerId);
         return envelope(result, await this.dockyard.snapshot());
       }
       async scan(request = {}) {
@@ -1339,11 +1345,24 @@ function createDockyardLlmAdapter({ runtime, providerIds, attachmentsResolver = 
       );
     });
   }
-  async function providerCatalog(provider, signal) {
+  const catalogGenerations = /* @__PURE__ */ new Map();
+  function bumpCatalogGeneration(provider) {
+    const next = (catalogGenerations.get(provider) ?? 0) + 1;
+    catalogGenerations.set(provider, next);
+    return next;
+  }
+  async function providerCatalog(provider, signal, { force = false } = {}) {
+    if (force) {
+      catalogCache.delete(provider);
+      catalogPromises.delete(provider);
+    }
     let promise = catalogPromises.get(provider);
     if (!promise) {
-      promise = Promise.resolve().then(() => runtime.getCatalog(provider, {})).then((catalog) => {
-        catalogCache.set(provider, { value: catalog, fetchedAt: Date.now() });
+      const generation = force ? bumpCatalogGeneration(provider) : catalogGenerations.get(provider) ?? 0;
+      promise = Promise.resolve().then(() => runtime.getCatalog(provider, force ? { force: true } : {})).then((catalog) => {
+        if ((catalogGenerations.get(provider) ?? 0) === generation) {
+          catalogCache.set(provider, { value: catalog, fetchedAt: Date.now() });
+        }
         return catalog;
       }).finally(() => {
         if (catalogPromises.get(provider) === promise) catalogPromises.delete(provider);
@@ -1351,6 +1370,28 @@ function createDockyardLlmAdapter({ runtime, providerIds, attachmentsResolver = 
       catalogPromises.set(provider, promise);
     }
     return raceCallerSignal(promise, signal);
+  }
+  function invalidateCatalog(providerId = null) {
+    if (providerId) {
+      bumpCatalogGeneration(providerId);
+      catalogCache.delete(providerId);
+      catalogPromises.delete(providerId);
+      return;
+    }
+    for (const provider of owned) bumpCatalogGeneration(provider);
+    catalogCache.clear();
+    catalogPromises.clear();
+  }
+  async function refreshCatalog(providerId = null) {
+    const ids = providerId ? [providerId] : [...owned];
+    const catalogs = [];
+    for (const id of ids) {
+      catalogs.push({
+        providerId: id,
+        catalog: await providerCatalog(id, void 0, { force: true })
+      });
+    }
+    return catalogs;
   }
   function cachedProviderCatalog(provider) {
     const entry = catalogCache.get(provider);
@@ -1383,6 +1424,8 @@ function createDockyardLlmAdapter({ runtime, providerIds, attachmentsResolver = 
     providerRetryPolicy() {
       return void 0;
     },
+    invalidateCatalog,
+    refreshCatalog,
     async listModels(provider, signal) {
       await ensureRuntimeReady();
       if (!providerHasConnectedAccount(runtime, provider)) return [];
@@ -3148,10 +3191,10 @@ var CodexOAuthDriver = class {
     wrapped.authForbidden = !sawAuthExpired && sawAuthForbidden;
     throw wrapped;
   }
-  async getCatalog() {
+  async getCatalog(context = {}) {
     if (this.catalogLoader) {
       try {
-        const catalog = await this.catalogLoader();
+        const catalog = await this.catalogLoader({ force: Boolean(context.force) });
         if (Array.isArray(catalog?.models) && catalog.models.length > 0) return catalog;
       } catch {
       }
@@ -6738,8 +6781,8 @@ function createGrokCatalogLoader({
   return async function loadCatalog({ force = false } = {}) {
     const now = Date.now();
     if (!force && cached && now - cachedAt < cacheTtlMs) return cached;
-    if (pending) return pending;
-    pending = (async () => {
+    if (!force && pending) return pending;
+    const request = (async () => {
       const cache = await readJson3(join7(resolvedHome, "models_cache.json"));
       let value;
       if (typeof commandRunner === "function") {
@@ -6773,9 +6816,10 @@ function createGrokCatalogLoader({
       cachedAt = Date.now();
       return value;
     })().finally(() => {
-      pending = null;
+      if (pending === request) pending = null;
     });
-    return pending;
+    pending = request;
+    return request;
   };
 }
 var GrokOAuthDriver = class {
@@ -10035,7 +10079,7 @@ function createCursorCatalogLoader({
     const cached = cachedBuckets.get(bucketKey);
     if (!force && cached && (hasBrowserAccount ? cached.source === "official_cursor_browser_oauth_api" : cached.source !== "official_cursor_browser_oauth_api")) return cached;
     const pending = pendingBuckets.get(bucketKey);
-    if (pending) return pending;
+    if (!force && pending) return pending;
     const promise = (async () => {
       try {
         const browser = await loadBrowserCatalog({ accounts, secretStore, signal });
@@ -10073,7 +10117,7 @@ function createCursorCatalogLoader({
         return catalog;
       }
     })().finally(() => {
-      pendingBuckets.delete(bucketKey);
+      if (pendingBuckets.get(bucketKey) === promise) pendingBuckets.delete(bucketKey);
     });
     pendingBuckets.set(bucketKey, promise);
     return promise;
@@ -11387,7 +11431,7 @@ function codexModelToDshCatalog(model) {
 }
 function createCodexDshCatalogLoader({ moduleAnchor = null } = {}) {
   let dependenciesPromise;
-  return async () => {
+  return async function loadCatalog(_context = {}) {
     dependenciesPromise ??= loadDependencies(moduleAnchor);
     const { openaiCodexProvider } = await dependenciesPromise;
     const models = openaiCodexProvider().getModels();
@@ -11499,7 +11543,9 @@ var DockyardDshService = class {
     refreshIntervalMs = numericOption2(process.env.DOCKYARD_DSH_REFRESH_INTERVAL_MS, DEFAULT_REFRESH_INTERVAL_MS),
     autoRefresh = true,
     openBrowser = openDefaultBrowser,
-    logger = console
+    logger = console,
+    catalogAdapter = null,
+    onCatalogUpdated = null
   } = {}) {
     if (!runtime) throw new Error("Dockyard DSH service requires a runtime");
     this.runtime = runtime;
@@ -11507,6 +11553,8 @@ var DockyardDshService = class {
     this.autoRefresh = autoRefresh;
     this.openBrowser = openBrowser;
     this.logger = logger;
+    this.catalogAdapter = catalogAdapter;
+    this.onCatalogUpdated = typeof onCatalogUpdated === "function" ? onCatalogUpdated : null;
     this.ready = runtime.init();
   }
   async start() {
@@ -11578,6 +11626,10 @@ var DockyardDshService = class {
     if (candidateId && imports.length === 0 && diagnostics.length === 0) {
       throw new Error(`\u6CA1\u6709\u627E\u5230\u672A\u6DFB\u52A0\u7684 OAuth \u5019\u9009\uFF1A${candidateId}`);
     }
+    if (imports.length > 0) {
+      const catalogProviderId = providerInput ? providerIdFor(this.runtime, providerInput) : null;
+      await this.refreshCatalog(catalogProviderId).catch((error) => this.#warn("post-add catalog refresh failed", error));
+    }
     return { accounts: imports, diagnostics, scan };
   }
   async refresh(providerInput = null) {
@@ -11593,11 +11645,55 @@ var DockyardDshService = class {
     this.#refreshPromises.set(refreshKey, promise);
     return promise;
   }
-  async catalog(providerInput) {
+  async catalog(providerInput, { force = false } = {}) {
     await this.ready;
     const providerId = providerIdFor(this.runtime, providerInput);
     if (!providerId) throw new Error(`\u672A\u77E5 provider\uFF1A${providerInput}`);
-    return { providerId, manifest: manifestFor2(this.runtime, providerInput), catalog: await this.runtime.getCatalog(providerId) };
+    if (force && typeof this.catalogAdapter?.invalidateCatalog === "function") {
+      this.catalogAdapter.invalidateCatalog(providerId);
+    }
+    const catalog = await this.runtime.getCatalog(providerId, force ? { force: true } : {});
+    if (force && typeof this.catalogAdapter?.invalidateCatalog === "function") {
+      this.catalogAdapter.invalidateCatalog(providerId);
+    }
+    return { providerId, manifest: manifestFor2(this.runtime, providerInput), catalog };
+  }
+  catalogProviderIds(providerId = null) {
+    if (providerId) return [providerId];
+    const snapshot = typeof this.runtime.snapshot === "function" ? this.runtime.snapshot() : null;
+    const connected = Array.isArray(snapshot?.providers) ? snapshot.providers.filter((provider) => Array.isArray(provider.accounts) && provider.accounts.length > 0).map((provider) => provider.providerId) : [];
+    if (connected.length > 0) return connected;
+    return this.runtime.listProviderIds?.() ?? [];
+  }
+  async refreshCatalog(providerInput = null) {
+    await this.ready;
+    const providerId = providerInput ? providerIdFor(this.runtime, providerInput) : null;
+    if (providerInput && !providerId) throw new Error(`\u672A\u77E5 provider\uFF1A${providerInput}`);
+    const providerIds = this.catalogProviderIds(providerId);
+    const catalogs = [];
+    for (const id of providerIds) {
+      if (typeof this.catalogAdapter?.invalidateCatalog === "function") {
+        this.catalogAdapter.invalidateCatalog(id);
+      }
+      const catalog = await this.runtime.getCatalog(id, { force: true });
+      if (typeof this.catalogAdapter?.invalidateCatalog === "function") {
+        this.catalogAdapter.invalidateCatalog(id);
+      }
+      catalogs.push({
+        providerId: id,
+        manifest: manifestFor2(this.runtime, id),
+        catalog,
+        modelCount: Array.isArray(catalog?.models) ? catalog.models.length : 0,
+        source: catalog?.source ?? null,
+        diagnostics: Array.isArray(catalog?.diagnostics) ? catalog.diagnostics : []
+      });
+    }
+    try {
+      this.onCatalogUpdated?.({ providerId, providerIds });
+    } catch (error) {
+      this.#warn("catalog update notification failed", error);
+    }
+    return { providerId, providerIds, catalogs };
   }
   async setPolicy(providerInput, policyInput, defaultAccountId = void 0) {
     await this.ready;
@@ -11692,6 +11788,7 @@ var DockyardDshService = class {
     else if (result.status === "completed") {
       this.#authSessions.delete(started.sessionId);
       await this.refresh(manifest.id).catch((error) => this.#warn("post-login quota refresh failed", error));
+      await this.refreshCatalog(manifest.id).catch((error) => this.#warn("post-login catalog refresh failed", error));
     }
     return result;
   }
@@ -11706,6 +11803,7 @@ var DockyardDshService = class {
     if (result.status === "completed") {
       this.#authSessions.delete(sessionId);
       await this.refresh(providerId).catch((error) => this.#warn("post-login quota refresh failed", error));
+      await this.refreshCatalog(providerId).catch((error) => this.#warn("post-login catalog refresh failed", error));
     } else if (!["pending", "processing"].includes(result.status)) {
       this.#authSessions.delete(sessionId);
     }
@@ -11735,6 +11833,7 @@ var DockyardDshService = class {
     else if (result.status === "completed") {
       this.#authSessions.delete(sessionId);
       await this.refresh(providerId).catch((error) => this.#warn("post-login quota refresh failed", error));
+      await this.refreshCatalog(providerId).catch((error) => this.#warn("post-login catalog refresh failed", error));
     } else if (result.status !== "pending" && result.status !== "processing") {
       this.#authSessions.delete(sessionId);
     }
@@ -11749,7 +11848,7 @@ var DockyardDshService = class {
       "/dockyard add [provider] [candidateId]   \u6DFB\u52A0\u626B\u63CF\u5230\u7684 OAuth \u8D26\u53F7",
       "/dockyard login <provider>               \u542F\u52A8 provider \u5B98\u65B9\u6388\u6743\u6D41\u7A0B\u5E76\u767B\u5F55",
       "/dockyard refresh [provider]             \u5F3A\u5236\u8BFB\u53D6\u5B9E\u65F6\u989D\u5EA6",
-      "/dockyard models <provider>              \u8BFB\u53D6 provider \u5B9E\u65F6\u6A21\u578B/\u6863\u4F4D",
+      "/dockyard models <provider>              \u5F3A\u5236\u8BFB\u53D6 provider \u5B9E\u65F6\u6A21\u578B/\u6863\u4F4D",
       "/dockyard policy <provider> <policy>     \u8BBE\u7F6E manual/sticky_session/round_robin/failover",
       "/dockyard use <provider> <accountId>      \u624B\u52A8\u6307\u5B9A\u8D26\u53F7",
       "/dockyard remove <provider> <accountId>   \u4ECE\u8D26\u53F7\u6C60\u79FB\u9664\u8D26\u53F7\u5E76\u6E05\u7406\u672C\u673A Keychain \u5F15\u7528",
@@ -11868,7 +11967,7 @@ ${providerName(provider.manifest)} [${provider.providerId}]`);
           }
           case "models": {
             if (!args[0]) return commandError("\u7528\u6CD5\uFF1A/dockyard models <provider>");
-            const { providerId, manifest, catalog } = await service.catalog(args[0]);
+            const { providerId, manifest, catalog } = await service.catalog(args[0], { force: true });
             const lines = [`${providerName(manifest)} [${providerId}] \u5B9E\u65F6\u6A21\u578B\u76EE\u5F55\uFF1A`];
             for (const model of catalog.models ?? []) {
               const efforts = model.reasoning?.efforts?.map((effort) => effort.id).join(", ");
@@ -12696,6 +12795,13 @@ function apply(ctx, config = {}) {
     const service = config.service ?? new DockyardDshService({
       runtime,
       ...config.serviceOptions ?? {},
+      catalogAdapter: adapter,
+      onCatalogUpdated: () => {
+        try {
+          ctx.emit?.("llm/adapters-updated");
+        } catch {
+        }
+      },
       logger: config.serviceOptions?.logger ?? contextLogger(ctx, "dockyard-dsh")
     });
     if (typeof ctx.provide === "function") ctx.provide("dockyard", service);
