@@ -118,6 +118,10 @@ async function loadExecutor(moduleAnchor) {
     createProvider,
     openAICodexResponsesApi,
     modelResolver: (modelId) => modelById.get(modelId),
+    // Live slugs the static registry does not know yet (e.g. a brand-new
+    // GPT release) are synthesized from the closest registry template so a
+    // freshly fetched catalog stays invokable.
+    registryModels: models,
   });
 }
 
